@@ -28,6 +28,7 @@ import { BaselineComparison } from './components/BaselineComparison';
 import { DecisionHistory } from './components/DecisionHistory';
 import { CinematicExperience } from './components/cinematic/CinematicExperience';
 import { ModelInspector } from './components/inspector/ModelInspector';
+import { AIRiskLens } from './components/AIRiskLens';
 import { Box, Grid } from 'lucide-react';
 
 export default function App() {
@@ -426,7 +427,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* Row 4: Shadow Simulation Candidates */}
+            {/* Row 4: AI RISK LENS (AI Predicts -> Digital Twin Verifies -> Referee Decides) */}
+            <AIRiskLens currentDecision={currentDecision} />
+
+            {/* Row 5: Shadow Simulation Candidates */}
             <ShadowSimulation
               candidates={candidates}
               selectedCandidateId={currentDecision?.selected_candidate?.candidate_id}

@@ -12,6 +12,7 @@ from .shadow_simulator import ShadowSimulator
 from .optimizer import ObjectiveOptimizer
 from .stability_manager import StabilityManager
 from ..ml.advisor import TrafficAdvisoryEngine
+from ..ml.surrogate.engine import DecisionIntelligenceEngine
 
 
 class ArbitrationEngine:
@@ -26,6 +27,7 @@ class ArbitrationEngine:
         self.shadow_simulator = ShadowSimulator(self.guardrails)
         self.stability_manager = StabilityManager()
         self.advisory_engine = advisory_engine or TrafficAdvisoryEngine.get_instance()
+        self.intelligence_engine = DecisionIntelligenceEngine.get_instance()
 
     def arbitrate(
         self,
@@ -91,8 +93,12 @@ class ArbitrationEngine:
         # Step 3: Candidate Generation
         candidate_defs = self.candidate_generator.generate_candidates(commands, live_network.cells)
 
-        # Step 4 & 5: Shadow Simulation & Safety Validation
-        evaluated_candidates = self.shadow_simulator.evaluate_candidates(live_network, candidate_defs)
+        # Step 4 & 5: AI PREDICTS -> DIGITAL TWIN VERIFIES -> AUDIT
+        evaluated_candidates, intelligence_audit = self.intelligence_engine.evaluate_with_intelligence_pipeline(
+            live_network=live_network,
+            candidate_defs=candidate_defs,
+            shadow_simulator=self.shadow_simulator,
+        )
 
         # Step 6: Multi-Objective Scoring
         scored_candidates = ObjectiveOptimizer.score_candidates(
@@ -262,4 +268,5 @@ class ArbitrationEngine:
             state_version=state_version,
             computation_time_ms=comp_time,
             predictive_advisory=chosen_advisory,
+            decision_intelligence=intelligence_audit.model_dump() if intelligence_audit else None,
         )

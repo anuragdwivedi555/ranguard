@@ -1,7 +1,11 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
+from pathlib import Path
+import pandas as pd
+
 from ...ml.advisor import TrafficAdvisoryEngine
+from ...ml.surrogate.engine import DecisionIntelligenceEngine
 from ...simulation.state_manager import StateManager
 
 router = APIRouter(prefix="/api/ml", tags=["Machine Learning"])
@@ -74,3 +78,59 @@ def get_cell_advisories():
         )
         advisories.append(CellAdvisoryItem(**adv))
     return advisories
+
+
+@router.get("/decision-intelligence/status", summary="Get status of ML action surrogate and decision intelligence")
+def get_decision_intelligence_status():
+    engine = DecisionIntelligenceEngine.get_instance()
+    is_loaded = engine.surrogate is not None and engine.surrogate.is_fitted
+    return {
+        "enabled": engine.enabled,
+        "model_loaded": is_loaded,
+        "model_version": "xgb-action-surrogate-v1.0",
+        "data_provenance": "Simulated radio environment (3GPP Macro Urban TR 36.814) — not physical testbed",
+        "primary_targets": ["Change in network coverage (%)", "Change in interference index"],
+        "electrical_power_model": "Deterministic physical RF + static baseband model",
+        "audit_records_count": len(engine._audit_history),
+    }
+
+
+@router.get("/decision-intelligence/audit/latest", summary="Get latest 3-panel decision intelligence audit")
+def get_latest_intelligence_audit():
+    engine = DecisionIntelligenceEngine.get_instance()
+    audit = engine.get_latest_audit()
+    if audit is None:
+        return {"status": "NO_AUDIT_AVAILABLE", "message": "No arbitration decisions evaluated yet in this session."}
+    return audit.model_dump()
+
+
+@router.get("/decision-intelligence/evaluation", summary="Get held-out evaluation metrics across models")
+def get_intelligence_evaluation():
+    csv_path = Path(__file__).resolve().parent.parent.parent.parent / "results" / "ml_decision_intelligence_metrics.csv"
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        return {"status": "SUCCESS", "metrics": df.to_dict(orient="records")}
+    return {"status": "PENDING", "metrics": []}
+
+
+class SurrogatePredictRequest(BaseModel):
+    target_cell: str = Field(default="CELL_03")
+    proposed_power: float = Field(default=34.0)
+    proposed_status: str = Field(default="ACTIVE")
+
+
+@router.post("/decision-intelligence/predict", summary="Predict action outcome using lightweight surrogate")
+def predict_candidate_outcome(req: SurrogatePredictRequest):
+    engine = DecisionIntelligenceEngine.get_instance()
+    mgr = StateManager.get_instance()
+    c_def = {
+        "candidate_id": f"TEST-CAND-{req.target_cell}",
+        "target_cell": req.target_cell,
+        "proposed_power": req.proposed_power,
+        "proposed_status": req.proposed_status,
+        "joint_actions": {req.target_cell: {"status": req.proposed_status, "tx_power_dbm": req.proposed_power}},
+    }
+    if engine.surrogate:
+        pred = engine.surrogate.predict_single_candidate(mgr.network, c_def)
+        return pred.model_dump()
+    return {"error": "Surrogate model uninitialized"}

@@ -62,3 +62,4 @@ class RefereeDecision(BaseModel):
     timestamp: float = Field(default_factory=time.time)
     committed: bool = False
     predictive_advisory: Optional[Dict[str, Any]] = Field(default=None, description="ML traffic forecast and capacity advisory signal")
+    decision_intelligence: Optional[Dict[str, Any]] = Field(default=None, description="AI Predicts -> Digital Twin Verifies -> Referee Decides audit trail")
