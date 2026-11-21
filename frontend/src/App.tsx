@@ -29,10 +29,11 @@ import { DecisionHistory } from './components/DecisionHistory';
 import { CinematicExperience } from './components/cinematic/CinematicExperience';
 import { ModelInspector } from './components/inspector/ModelInspector';
 import { Box, Grid } from 'lucide-react';
+import { ControlRoom } from './control/ControlRoom';
 
 export default function App() {
   // Navigation View: 'cinematic' (3D Technical Walkthrough) or 'lab' (Interactive Simulation Lab)
-  const [viewMode, setViewMode] = useState<'cinematic' | 'lab'>('cinematic');
+  const [viewMode, setViewMode] = useState<'control' | 'cinematic' | 'lab'>('control');
 
   // Network representation in Lab view: '3d' or '2d'
   const [labNetworkView, setLabNetworkView] = useState<'3d' | '2d'>('3d');
@@ -298,8 +299,9 @@ export default function App() {
         initialModelId={inspectorModelId}
       />
 
-      {/* VIEW MODE 1: CINEMATIC 3D TECHNICAL EXPERIENCE */}
-      {viewMode === 'cinematic' ? (
+      {viewMode === 'control' ? (
+        <ControlRoom onOpenStory={() => setViewMode('cinematic')} onOpenMath={() => handleOpenInspector()} />
+      ) : viewMode === 'cinematic' ? (
         <CinematicExperience
           cells={networkState.cells}
           users={networkState.users}
@@ -310,7 +312,7 @@ export default function App() {
           isBackendHealthy={isBackendHealthy}
           mlStatus={mlStatus}
           onToggleML={handleToggleML}
-          onEnterLab={() => setViewMode('lab')}
+          onEnterLab={() => setViewMode('control')}
           onOpenModelInspector={handleOpenInspector}
         />
       ) : (

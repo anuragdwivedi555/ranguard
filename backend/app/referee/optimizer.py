@@ -87,3 +87,63 @@ class ObjectiveOptimizer:
         # Unsafe candidates will be at the bottom (-999.0)
         scored_candidates.sort(key=lambda c: (c.is_safe, c.objective_score), reverse=True)
         return scored_candidates
+
+    @classmethod
+    def explain(
+        cls,
+        cand: CandidateAction,
+        baseline_metrics: NetworkMetrics,
+        current_cells: Dict[str, Cell],
+    ) -> List[Dict]:
+        """
+        Display-ready breakdown of score_candidates(): for each objective the formula with
+        the real inputs, the clipped score, its weight and its contribution to the total.
+        """
+        if not cand.is_safe:
+            return []
+        pred = cand.predicted_metrics
+        be = max(baseline_metrics.total_energy, 1.0)
+        bi = max(baseline_metrics.interference_level, 0.01)
+        bc = baseline_metrics.coverage_percentage
+        total_delta = 0.0
+        for cid, act in cand.joint_actions.items():
+            if cid in current_cells and "tx_power_dbm" in act:
+                total_delta += abs(act["tx_power_dbm"] - current_cells[cid].tx_power_dbm)
+        terms = [
+            {
+                "key": "energy",
+                "label": "Energy saving",
+                "weight": cls.WEIGHT_ENERGY,
+                "score": cand.energy_score,
+                "formula": f"({be:.2f} − {pred.total_energy:.2f}) ÷ {be:.2f} × 2",
+                "raw": (be - pred.total_energy) / be * 2.0,
+            },
+            {
+                "key": "interference",
+                "label": "Interference reduction",
+                "weight": cls.WEIGHT_INTERFERENCE,
+                "score": cand.interference_score,
+                "formula": f"({bi:.1f} − {pred.interference_level:.1f}) ÷ {bi:.1f} × 1.5",
+                "raw": (bi - pred.interference_level) / bi * 1.5,
+            },
+            {
+                "key": "coverage",
+                "label": "Coverage quality",
+                "weight": cls.WEIGHT_COVERAGE,
+                "score": cand.coverage_score,
+                "formula": f"({pred.coverage_percentage:.1f} − {bc:.1f}) ÷ 5  +  ({pred.coverage_percentage:.1f} − 95) ÷ 5",
+                "raw": (pred.coverage_percentage - bc) / 5.0 + (pred.coverage_percentage - 95.0) / 5.0,
+            },
+            {
+                "key": "change",
+                "label": "Smallest change",
+                "weight": cls.WEIGHT_MIN_CHANGE,
+                "score": cand.change_score,
+                "formula": f"1 − {total_delta:.1f} dB ÷ 10",
+                "raw": 1.0 - total_delta / 10.0,
+            },
+        ]
+        for t in terms:
+            t["raw"] = round(t["raw"], 3)
+            t["contribution"] = round(t["weight"] * t["score"], 4)
+        return terms
