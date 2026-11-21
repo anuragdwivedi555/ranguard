@@ -120,6 +120,7 @@ def test_decision_intelligence_pipeline_execution():
     guardrails = SafetyGuardrails()
     shadow_sim = ShadowSimulator(guardrails)
     engine = DecisionIntelligenceEngine.get_instance()
+    engine.toggle(True)
 
     c_defs = [
         {
@@ -142,7 +143,8 @@ def test_decision_intelligence_pipeline_execution():
         },
     ]
 
-    evaluated, audit = engine.evaluate_with_intelligence_pipeline(net, c_defs, shadow_sim)
+    evaluated, audit = engine.evaluate_with_intelligence_pipeline(net, c_defs, shadow_sim, force_audit=True)
+    engine.toggle(False)
     assert len(evaluated) == 2
     assert audit is not None
     assert audit.total_candidates_screened == 2
@@ -181,15 +183,20 @@ def test_safety_guardrails_never_bypassed_by_ml():
         cycle=1,
     )
 
-    decision = arbitrator.arbitrate(net, [shutdown_cmd])
-    # Full shutdown must NOT be approved because it violates coverage
-    assert decision.verdict in ["MODIFY", "REJECT"]
-    assert decision.selected_candidate is not None
-    # Verify selected action is safe
-    assert decision.selected_candidate.is_safe is True
-    # Verify decision includes decision_intelligence audit
-    assert decision.decision_intelligence is not None
-    audit = decision.decision_intelligence
+    # 1. Baseline mode (Pure shadow twin, AI Risk Lens disabled)
+    decision_base = arbitrator.arbitrate(net, [shutdown_cmd], enable_ai_risk_lens=False)
+    assert decision_base.verdict in ["MODIFY", "REJECT"]
+    assert decision_base.selected_candidate is not None
+    assert decision_base.selected_candidate.is_safe is True
+    assert decision_base.decision_intelligence is None
+
+    # 2. On-demand AI Risk Lens mode enabled
+    decision_lens = arbitrator.arbitrate(net, [shutdown_cmd], enable_ai_risk_lens=True)
+    assert decision_lens.verdict in ["MODIFY", "REJECT"]
+    assert decision_lens.selected_candidate is not None
+    assert decision_lens.selected_candidate.is_safe is True
+    assert decision_lens.decision_intelligence is not None
+    audit = decision_lens.decision_intelligence
     assert "candidate_comparisons" in audit
     assert len(audit["candidate_comparisons"]) >= 1
 
@@ -200,17 +207,22 @@ def test_api_decision_intelligence_endpoints():
     s_res = client.get("/api/ml/decision-intelligence/status")
     assert s_res.status_code == 200
     s_data = s_res.json()
-    assert s_data["enabled"] is True
+    assert "enabled" in s_data
     assert s_data["model_version"] == "xgb-action-surrogate-v1.0"
     assert "Simulated" in s_data["data_provenance"]
 
-    # 2. Evaluation metrics endpoint
+    # 2. Toggle endpoint
+    t_res = client.post("/api/ml/decision-intelligence/toggle", json={"enabled": True})
+    assert t_res.status_code == 200
+    assert t_res.json()["enabled"] is True
+
+    # 3. Evaluation metrics endpoint
     e_res = client.get("/api/ml/decision-intelligence/evaluation")
     assert e_res.status_code == 200
     e_data = e_res.json()
     assert e_data["status"] in ["SUCCESS", "PENDING"]
 
-    # 3. Predict candidate endpoint
+    # 4. Predict candidate endpoint (In-Distribution)
     p_res = client.post("/api/ml/decision-intelligence/predict", json={
         "target_cell": "CELL_03",
         "proposed_power": 34.0,
@@ -222,7 +234,46 @@ def test_api_decision_intelligence_endpoints():
     assert "predicted_interference_delta" in p_data
     assert "predicted_energy_delta" in p_data
     assert "predicted_is_safe" in p_data
+    assert p_data["out_of_distribution"] is False
 
-    # 4. Audit latest endpoint
+    # 5. Predict candidate endpoint (Out-of-Distribution guardrail)
+    ood_res = client.post("/api/ml/decision-intelligence/predict", json={
+        "target_cell": "CELL_03",
+        "proposed_power": 52.0,  # > 46 dBm
+        "proposed_status": "ACTIVE",
+    })
+    assert ood_res.status_code == 200
+    ood_data = ood_res.json()
+    assert ood_data["out_of_distribution"] is True
+    assert "outside validated operational envelope" in ood_data["ood_warning"]
+
+    # 6. Audit latest endpoint
     a_res = client.get("/api/ml/decision-intelligence/audit/latest")
     assert a_res.status_code == 200
+
+
+def test_on_demand_ml_reduces_default_overhead():
+    """Verify that disabling AI Risk Lens executes pure shadow simulation without ML overhead."""
+    net = NetworkEngine(seed=42)
+    arbitrator = ArbitrationEngine()
+
+    cmd = ControllerCommand(
+        command_id="CMD-TEST-OVERHEAD",
+        controller_id="ENERGY",
+        target_cell="CELL_03",
+        action_type="POWER_DOWN",
+        current_value=38.0,
+        proposed_value=34.0,
+        delta=-4.0,
+        reason="Overhead benchmark test",
+        priority=5,
+        cycle=1,
+    )
+
+    # Disabled mode: no audit overhead
+    d_off = arbitrator.arbitrate(net, [cmd], enable_ai_risk_lens=False)
+    assert d_off.decision_intelligence is None
+
+    # Enabled mode: generates audit
+    d_on = arbitrator.arbitrate(net, [cmd], enable_ai_risk_lens=True)
+    assert d_on.decision_intelligence is not None

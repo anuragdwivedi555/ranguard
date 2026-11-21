@@ -18,6 +18,7 @@ history_service = HistoryService.get_instance()
 
 class EvaluateRequest(BaseModel):
     commands: List[ControllerCommand]
+    enable_ai_risk_lens: Optional[bool] = None
 
 
 class CommitRequest(BaseModel):
@@ -33,7 +34,7 @@ class CommitResponse(BaseModel):
 @router.post("/evaluate", response_model=RefereeDecision, summary="Evaluate candidate proposals in shadow simulation")
 def evaluate_proposals(req: EvaluateRequest):
     mgr = StateManager.get_instance()
-    decision = arbitrator.arbitrate(mgr.network, req.commands)
+    decision = arbitrator.arbitrate(mgr.network, req.commands, enable_ai_risk_lens=req.enable_ai_risk_lens)
     return decision
 
 

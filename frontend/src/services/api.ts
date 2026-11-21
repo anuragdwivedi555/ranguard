@@ -103,6 +103,11 @@ export const api = {
     return res.data;
   },
 
+  toggleDecisionIntelligence: async (enabled: boolean): Promise<any> => {
+    const res = await client.post('/ml/decision-intelligence/toggle', { enabled });
+    return res.data;
+  },
+
   getLatestIntelligenceAudit: async (): Promise<any> => {
     const res = await client.get('/ml/decision-intelligence/audit/latest');
     return res.data;

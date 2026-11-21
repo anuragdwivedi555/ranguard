@@ -40,8 +40,10 @@ export const AIRiskLens: React.FC<AIRiskLensProps> = ({
   const [customStatus, setCustomStatus] = useState<string>('ACTIVE');
   const [customPrediction, setCustomPrediction] = useState<any | null>(null);
   const [isPredicting, setIsPredicting] = useState<boolean>(false);
+  const [lensEnabled, setLensEnabled] = useState<boolean>(false);
+  const [localAudit, setLocalAudit] = useState<DecisionIntelligenceAudit | null>(null);
 
-  const audit: DecisionIntelligenceAudit | undefined = currentDecision?.decision_intelligence || undefined;
+  const audit: DecisionIntelligenceAudit | undefined = currentDecision?.decision_intelligence || localAudit || undefined;
   const pairs: PredictionVerificationPair[] = audit?.candidate_comparisons || [];
 
   useEffect(() => {
@@ -51,7 +53,31 @@ export const AIRiskLens: React.FC<AIRiskLensProps> = ({
         setEvalMetrics(res.metrics);
       }
     }).catch(() => {});
-  }, []);
+
+    // Check backend on-demand AI Risk Lens status
+    api.getDecisionIntelligenceStatus().then((res) => {
+      if (res) setLensEnabled(!!res.enabled);
+    }).catch(() => {});
+
+    // If current decision has no audit, fetch or generate on-demand latest
+    if (!currentDecision?.decision_intelligence) {
+      api.getLatestIntelligenceAudit().then((res) => {
+        if (res && res.cycle !== undefined) {
+          setLocalAudit(res);
+        }
+      }).catch(() => {});
+    }
+  }, [currentDecision]);
+
+  const handleToggleLens = async () => {
+    try {
+      const nextState = !lensEnabled;
+      const res = await api.toggleDecisionIntelligence(nextState);
+      setLensEnabled(!!res.enabled);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleCustomPredict = async () => {
     setIsPredicting(true);
@@ -69,7 +95,7 @@ export const AIRiskLens: React.FC<AIRiskLensProps> = ({
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl space-y-6">
-      {/* Header and Mode Selector */}
+      {/* Header, On-Demand Toggle, and Mode Selector */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -77,12 +103,25 @@ export const AIRiskLens: React.FC<AIRiskLensProps> = ({
               <Brain className="w-5 h-5 animate-pulse" />
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                AI RISK LENS
-                <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
-                  DECISION INTELLIGENCE
-                </span>
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                  AI RISK LENS
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+                    DECISION INTELLIGENCE
+                  </span>
+                </h2>
+                <button
+                  onClick={handleToggleLens}
+                  className={`text-[11px] px-2.5 py-1 rounded-full font-mono font-bold transition-all border ${
+                    lensEnabled
+                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/50 hover:bg-emerald-900'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                  }`}
+                  title="Toggle on-demand surrogate execution during referee arbitration"
+                >
+                  {lensEnabled ? '● AI LENS: ACTIVE' : '○ AI LENS: STANDBY (PURE SHADOW)'}
+                </button>
+              </div>
               <p className="text-xs text-slate-400 mt-0.5 font-mono">
                 AI PREDICTS → DIGITAL TWIN VERIFIES → REFEREE DECIDES
               </p>
@@ -518,30 +557,47 @@ export const AIRiskLens: React.FC<AIRiskLensProps> = ({
             </div>
 
             {customPrediction && (
-              <div className="p-3 rounded-lg bg-slate-900/90 border border-cyan-800/40 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Predicted Coverage:</span>
-                  <span className="font-bold text-cyan-300 font-mono text-sm">
-                    {customPrediction.predicted_coverage_pct?.toFixed(1)}% ({customPrediction.predicted_coverage_delta >= 0 ? '+' : ''}{customPrediction.predicted_coverage_delta?.toFixed(2)}%)
-                  </span>
+              <div className="space-y-2">
+                {customPrediction.out_of_distribution && (
+                  <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-500/50 flex items-start gap-2.5 text-xs text-amber-200">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-amber-300 block">Out-of-Distribution Warning:</span>
+                      <span>{customPrediction.ood_warning || "Input parameters outside validated operational envelope [10.0, 46.0 dBm]. Tree surrogate extrapolations are unverified."}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3 rounded-lg bg-slate-900/90 border border-cyan-800/40 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Predicted Coverage:</span>
+                    <span className="font-bold text-cyan-300 font-mono text-sm">
+                      {customPrediction.predicted_coverage_pct?.toFixed(1)}% ({customPrediction.predicted_coverage_delta >= 0 ? '+' : ''}{customPrediction.predicted_coverage_delta?.toFixed(2)}%)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Predicted Interference:</span>
+                    <span className="font-bold text-purple-300 font-mono text-sm">
+                      {customPrediction.predicted_interference?.toFixed(1)} ({customPrediction.predicted_interference_delta >= 0 ? '+' : ''}{customPrediction.predicted_interference_delta?.toFixed(2)})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Power Delta (Deterministic):</span>
+                    <span className="font-bold text-amber-300 font-mono text-sm">
+                      {customPrediction.predicted_energy_delta >= 0 ? '+' : ''}{customPrediction.predicted_energy_delta?.toFixed(1)} W
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Predicted Feasibility:</span>
+                    <span className={`font-bold font-mono text-sm ${customPrediction.predicted_is_safe ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {customPrediction.predicted_is_safe ? 'FEASIBLE' : 'SAFETY VIOLATION RISK'}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Predicted Interference:</span>
-                  <span className="font-bold text-purple-300 font-mono text-sm">
-                    {customPrediction.predicted_interference?.toFixed(1)} ({customPrediction.predicted_interference_delta >= 0 ? '+' : ''}{customPrediction.predicted_interference_delta?.toFixed(2)})
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Power Delta (Deterministic):</span>
-                  <span className="font-bold text-amber-300 font-mono text-sm">
-                    {customPrediction.predicted_energy_delta >= 0 ? '+' : ''}{customPrediction.predicted_energy_delta?.toFixed(1)} W
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Predicted Feasibility:</span>
-                  <span className={`font-bold font-mono text-sm ${customPrediction.predicted_is_safe ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {customPrediction.predicted_is_safe ? 'FEASIBLE' : 'SAFETY VIOLATION RISK'}
-                  </span>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[10px] text-slate-500 font-mono px-1">
+                  <span>Provenance: {customPrediction.data_provenance}</span>
+                  <span className="text-amber-400/80">Advisory screening only — Digital Twin verification mandatory</span>
                 </div>
               </div>
             )}
@@ -607,9 +663,15 @@ export const AIRiskLens: React.FC<AIRiskLensProps> = ({
               </table>
             </div>
 
-            <div className="mt-4 p-3 rounded-lg bg-amber-950/20 border border-amber-800/40 text-xs text-amber-200/90 leading-relaxed">
-              <span className="font-bold text-amber-300 block mb-0.5">Key Scientific Finding (Why Digital Twins Remain Essential):</span>
-              While XGBoost achieves R² = 0.9898 on interference and drops coverage MAE to 0.52%, it yields 216 false negatives near the 95.0% threshold. This conclusively proves why ML cannot replace the Digital Twin in safety-critical networks: AI predicts, but the Digital Twin must verify.
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-800/40 text-xs text-amber-200/90 leading-relaxed">
+                <span className="font-bold text-amber-300 block mb-1">Safety Risk Audit (Why Digital Twins Remain Essential):</span>
+                XGBoost achieves R² = 0.9898 on interference and 0.52% coverage MAE, but misses 216 unsafe actions (90.0% false-negative rate) on held-out test data. Threshold tuning on validation episodes (T=96.0%) increases recall to 78.6% only by collapsing precision to 29.7% (104 false alarms). This proves ML surrogates cannot autonomously gate safety: the Digital Twin must verify every decision.
+              </div>
+              <div className="p-3 rounded-lg bg-cyan-950/20 border border-cyan-800/40 text-xs text-cyan-200/90 leading-relaxed">
+                <span className="font-bold text-cyan-300 block mb-1">Ranking Audit (Spearman ρ = 0.8783 vs Top-1 = 20.0%):</span>
+                High rank correlation proves the surrogate captures global multi-objective gradients across diverse actions. However, top feasible candidates have objective scores within ±0.02 of each other, where ~0.5% coverage residual error flips rank #1 and #2. Therefore, candidate pruning via ML is strictly prohibited; all candidates must be evaluated by the authoritative shadow twin.
+              </div>
             </div>
           </div>
         </div>

@@ -66,6 +66,8 @@ class SurrogatePrediction(BaseModel):
     prediction_timestamp: float = Field(default_factory=time.time)
     model_version: str = "xgb-action-surrogate-v1.0"
     data_provenance: str = "Simulated radio environment (3GPP Macro Urban TR 36.814) — not physical testbed"
+    out_of_distribution: bool = Field(default=False, description="Whether proposed action is outside validated operational envelope")
+    ood_warning: Optional[str] = Field(default=None, description="Detailed out-of-distribution explanation if applicable")
 
 
 class CandidateTwinVerification(BaseModel):

@@ -80,6 +80,10 @@ def get_cell_advisories():
     return advisories
 
 
+class MLIntelligenceToggleRequest(BaseModel):
+    enabled: bool = Field(..., description="Enable or disable on-demand AI Risk Lens surrogate execution")
+
+
 @router.get("/decision-intelligence/status", summary="Get status of ML action surrogate and decision intelligence")
 def get_decision_intelligence_status():
     engine = DecisionIntelligenceEngine.get_instance()
@@ -95,10 +99,41 @@ def get_decision_intelligence_status():
     }
 
 
+@router.post("/decision-intelligence/toggle", summary="Toggle on-demand AI Risk Lens execution")
+def toggle_decision_intelligence(req: MLIntelligenceToggleRequest):
+    engine = DecisionIntelligenceEngine.get_instance()
+    engine.toggle(req.enabled)
+    return get_decision_intelligence_status()
+
+
 @router.get("/decision-intelligence/audit/latest", summary="Get latest 3-panel decision intelligence audit")
-def get_latest_intelligence_audit():
+def get_latest_intelligence_audit(generate_if_empty: bool = True):
     engine = DecisionIntelligenceEngine.get_instance()
     audit = engine.get_latest_audit()
+    if audit is None and generate_if_empty:
+        # Generate on-demand audit using current network state
+        from ...controllers.controller_manager import ControllerManager
+        from ...referee.candidate_generator import CandidateGenerator
+        from ...referee.shadow_simulator import ShadowSimulator
+        from ...referee.guardrails import SafetyGuardrails
+        mgr = StateManager.get_instance()
+        ctrl_mgr = ControllerManager.get_instance()
+        cand_gen = CandidateGenerator()
+        shadow_sim = ShadowSimulator(SafetyGuardrails())
+        commands = ctrl_mgr.generate_all_proposals(
+            cells=mgr.network.cells,
+            users=mgr.network.users,
+            metrics=mgr.network.metrics,
+            cycle=mgr.network.cycle,
+        )
+        if commands:
+            c_defs = cand_gen.generate_candidates(commands, mgr.network.cells)
+            _, audit = engine.evaluate_with_intelligence_pipeline(
+                live_network=mgr.network,
+                candidate_defs=c_defs,
+                shadow_simulator=shadow_sim,
+                force_audit=True,
+            )
     if audit is None:
         return {"status": "NO_AUDIT_AVAILABLE", "message": "No arbitration decisions evaluated yet in this session."}
     return audit.model_dump()
@@ -123,6 +158,19 @@ class SurrogatePredictRequest(BaseModel):
 def predict_candidate_outcome(req: SurrogatePredictRequest):
     engine = DecisionIntelligenceEngine.get_instance()
     mgr = StateManager.get_instance()
+
+    # Task 4: Out-of-Distribution validation check
+    valid_cells = list(mgr.network.cells.keys())
+    is_ood = False
+    warning_msg = None
+
+    if req.target_cell not in valid_cells:
+        is_ood = True
+        warning_msg = f"Unknown target cell '{req.target_cell}'. Valid cell identifiers: {valid_cells}."
+    elif req.proposed_status == "ACTIVE" and (req.proposed_power < 10.0 or req.proposed_power > 46.0):
+        is_ood = True
+        warning_msg = f"Proposed power {req.proposed_power:.1f} dBm is outside validated operational envelope [10.0, 46.0 dBm]. Tree surrogate extrapolations are unverified."
+
     c_def = {
         "candidate_id": f"TEST-CAND-{req.target_cell}",
         "target_cell": req.target_cell,
@@ -132,5 +180,8 @@ def predict_candidate_outcome(req: SurrogatePredictRequest):
     }
     if engine.surrogate:
         pred = engine.surrogate.predict_single_candidate(mgr.network, c_def)
+        pred.out_of_distribution = is_ood
+        pred.ood_warning = warning_msg
+        pred.data_provenance = "Simulated radio environment (3GPP Macro Urban TR 36.814) — not physical testbed"
         return pred.model_dump()
     return {"error": "Surrogate model uninitialized"}

@@ -33,6 +33,7 @@ class ArbitrationEngine:
         self,
         live_network: NetworkEngine,
         commands: List[ControllerCommand],
+        enable_ai_risk_lens: Optional[bool] = None,
     ) -> RefereeDecision:
         start_time = time.perf_counter()
 
@@ -94,11 +95,18 @@ class ArbitrationEngine:
         candidate_defs = self.candidate_generator.generate_candidates(commands, live_network.cells)
 
         # Step 4 & 5: AI PREDICTS -> DIGITAL TWIN VERIFIES -> AUDIT
-        evaluated_candidates, intelligence_audit = self.intelligence_engine.evaluate_with_intelligence_pipeline(
-            live_network=live_network,
-            candidate_defs=candidate_defs,
-            shadow_simulator=self.shadow_simulator,
-        )
+        # On-Demand Execution: only run surrogate inference pipeline if explicitly requested/enabled
+        run_lens = self.intelligence_engine.enabled if enable_ai_risk_lens is None else enable_ai_risk_lens
+        if run_lens:
+            evaluated_candidates, intelligence_audit = self.intelligence_engine.evaluate_with_intelligence_pipeline(
+                live_network=live_network,
+                candidate_defs=candidate_defs,
+                shadow_simulator=self.shadow_simulator,
+                force_audit=True,
+            )
+        else:
+            evaluated_candidates = self.shadow_simulator.evaluate_candidates(live_network, candidate_defs)
+            intelligence_audit = None
 
         # Step 6: Multi-Objective Scoring
         scored_candidates = ObjectiveOptimizer.score_candidates(

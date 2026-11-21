@@ -35,7 +35,7 @@ class DecisionIntelligenceEngine:
     def __init__(
         self,
         artifact_dir: Optional[Path] = None,
-        enabled: bool = True,
+        enabled: bool = False,
     ):
         self.enabled = enabled
         self.surrogate: Optional[XGBoostActionSurrogate] = None
@@ -61,6 +61,7 @@ class DecisionIntelligenceEngine:
 
     def toggle(self, enabled: bool) -> bool:
         self.enabled = enabled
+        logger.info(f"DecisionIntelligenceEngine: On-demand AI Risk Lens toggled to {self.enabled}")
         return self.enabled
 
     def _initialize_surrogate(self) -> None:
@@ -77,15 +78,23 @@ class DecisionIntelligenceEngine:
         live_network: NetworkEngine,
         candidate_defs: List[Dict[str, Any]],
         shadow_simulator: ShadowSimulator,
+        force_audit: bool = False,
     ) -> Tuple[List[CandidateAction], Optional[DecisionIntelligenceAudit]]:
         """
         Executes the three-phase decision loop:
         1. AI PREDICTS: Pre-action surrogate predictions generated and timestamped.
         2. DIGITAL TWIN VERIFIES: Authoritative shadow simulation calculates ground truth.
         3. REFEREE AUDIT: Pairs predictions with verifications and calculates prediction errors.
+
+        If disabled and not force_audit, bypasses surrogate pipeline completely to eliminate latency overhead.
         """
         if not candidate_defs:
             return [], None
+
+        # Task 1: If surrogate execution is not requested, run pure shadow simulator directly
+        if not self.enabled and not force_audit:
+            evaluated_candidates = shadow_simulator.evaluate_candidates(live_network, candidate_defs)
+            return evaluated_candidates, None
 
         current_cycle = live_network.cycle
         base_metrics = live_network.metrics
@@ -96,13 +105,27 @@ class DecisionIntelligenceEngine:
         t_pred_start = time.perf_counter()
         predictions: List[SurrogatePrediction] = []
 
-        if self.enabled and self.surrogate is not None:
+        if self.surrogate is not None:
             for c_def in candidate_defs:
                 pred = self.surrogate.predict_single_candidate(live_network, c_def)
                 predictions.append(pred)
         else:
             for c_def in candidate_defs:
                 # Fallback neutral prediction
+                predictions.append(SurrogatePrediction(
+                    candidate_id=c_def["candidate_id"],
+                    target_cell=c_def.get("target_cell", "ALL"),
+                    predicted_coverage_delta=0.0,
+                    predicted_coverage_pct=base_metrics.coverage_percentage,
+                    predicted_interference_delta=0.0,
+                    predicted_interference=base_metrics.interference_level,
+                    predicted_energy_delta=0.0,
+                    predicted_total_energy=base_metrics.total_energy,
+                    predicted_is_safe=True,
+                    safety_risk_score=0.0,
+                    surrogate_objective_score=0.0,
+                    prediction_latency_ms=0.0,
+                ))
                 predictions.append(SurrogatePrediction(
                     candidate_id=c_def["candidate_id"],
                     target_cell=c_def.get("target_cell", "ALL"),

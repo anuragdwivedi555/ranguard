@@ -61,13 +61,15 @@ def evaluate_safety_classification(
     tn = int(np.sum((~actual_unsafe) & (~pred_unsafe)))
 
     precision = float(tp / (tp + fp)) if (tp + fp) > 0 else 1.0
-    recall = float(tp / (tp + fn)) if (tp + fn) > 0 else 1.0
+    recall = float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0
+    fn_rate = float(fn / (tp + fn)) if (tp + fn) > 0 else 0.0
     f1 = float(2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
     accuracy = float((tp + tn) / max(1, len(actual_safe)))
 
     return {
         "precision": round(precision, 4),
         "recall": round(recall, 4),
+        "false_negative_rate": round(fn_rate, 4),
         "f1": round(f1, 4),
         "accuracy": round(accuracy, 4),
         "true_positives": tp,
@@ -75,6 +77,7 @@ def evaluate_safety_classification(
         "false_negatives": fn,  # CRITICAL METRIC
         "true_negatives": tn,
         "total_actual_unsafe": int(np.sum(actual_unsafe)),
+        "total_actual_safe": int(np.sum(~actual_unsafe)),
     }
 
 
@@ -150,6 +153,9 @@ class SurrogateEvaluator:
         if artifact_dir is None:
             artifact_dir = Path(__file__).resolve().parent.parent / "artifacts"
         surrogate.save(artifact_dir)
+
+        # Task 2: Audit validation set thresholds (no test leakage)
+        val_threshold_results = self.audit_validation_safety_thresholds(val_df, surrogate)
 
         # 2. Compute metrics on strictly held-out test episodes
         metrics_zero_cov = calculate_metrics_dict(y_cov_test, pred_cov_zero)
@@ -403,8 +409,32 @@ class SurrogateEvaluator:
                 "p50_ms": round(lat_p50, 3),
                 "p95_ms": round(lat_p95, 3),
             },
+            "validation_threshold_audit": val_threshold_results,
             "metrics_csv_path": str(metrics_csv_path),
             "predictions_csv_path": str(pred_csv_path),
         }
 
         return eval_summary, predictions_df
+
+    @staticmethod
+    def audit_validation_safety_thresholds(
+        val_df: pd.DataFrame,
+        surrogate: XGBoostActionSurrogate,
+    ) -> List[Dict[str, Any]]:
+        """
+        Task 2 Audit: Explores whether adjusting the safety threshold on validation data (seeds 49, 50)
+        can achieve acceptable recall without collapsing precision.
+        """
+        X_val = val_df[FEATURE_COLUMNS]
+        base_cov_val = val_df["base_coverage_pct"].to_numpy(dtype=float)
+        target_safe_val = val_df["target_is_safe"].to_numpy(dtype=int)
+        pred_cov_val, _ = surrogate.predict_batch(X_val)
+
+        thresholds = [94.0, 94.5, 95.0, 95.5, 96.0, 96.5, 97.0]
+        results = []
+        for t in thresholds:
+            pred_safe_t = ((base_cov_val + pred_cov_val) >= t).astype(int)
+            metrics = evaluate_safety_classification(target_safe_val, pred_safe_t)
+            metrics["threshold_pct"] = t
+            results.append(metrics)
+        return results
