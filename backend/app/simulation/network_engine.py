@@ -9,6 +9,7 @@ from .signal_model import SignalModel
 from .interference_model import InterferenceModel
 from .energy_model import EnergyModel
 from .metrics_engine import MetricsEngine
+from .traffic_provider import TrafficProvider, TrafficMode, SyntheticTrafficProvider, MilanReplayTrafficProvider
 
 
 class NetworkEngine:
@@ -21,7 +22,12 @@ class NetworkEngine:
     TOTAL_USERS: int = 100
     CELL_CAPACITY: int = 35
 
-    def __init__(self, seed: int = DEFAULT_SEED):
+    def __init__(
+        self,
+        seed: int = DEFAULT_SEED,
+        traffic_mode: TrafficMode = TrafficMode.SYNTHETIC,
+        traffic_provider: Optional[TrafficProvider] = None,
+    ):
         self.seed = seed
         self.rng = np.random.RandomState(seed)
         self.cells: Dict[str, Cell] = {}
@@ -29,6 +35,16 @@ class NetworkEngine:
         self.metrics: Optional[NetworkMetrics] = None
         self.cycle: int = 1
         self.state_version: int = 1
+        self.traffic_mode = traffic_mode
+        if traffic_provider is not None:
+            self.traffic_provider = traffic_provider
+            self.traffic_mode = traffic_provider.mode
+        elif traffic_mode == TrafficMode.SYNTHETIC:
+            self.traffic_provider = SyntheticTrafficProvider()
+        elif traffic_mode == TrafficMode.MILAN_REPLAY:
+            self.traffic_provider = MilanReplayTrafficProvider()
+        else:
+            self.traffic_provider = SyntheticTrafficProvider()
         self.initialize_network()
 
     def initialize_network(self) -> None:
@@ -86,6 +102,7 @@ class NetworkEngine:
                         x=round(ux, 1),
                         y=round(uy, 1),
                         traffic_demand=demand,
+                        base_traffic_demand=demand,
                     )
                 )
                 user_idx += 1
@@ -101,11 +118,16 @@ class NetworkEngine:
                     x=ux,
                     y=uy,
                     traffic_demand=demand,
+                    base_traffic_demand=demand,
                 )
             )
             user_idx += 1
 
-        # 3. Perform initial network recalculation
+        # 3. Apply traffic provider demands if provider attached
+        if hasattr(self, "traffic_provider") and self.traffic_provider is not None:
+            self.traffic_provider.update_cycle(self.users, self.cells, self.cycle)
+
+        # 4. Perform initial network recalculation
         self.recalculate()
 
     def recalculate(self) -> NetworkMetrics:
@@ -163,7 +185,11 @@ class NetworkEngine:
         # Update cell utilization and radiated interference
         cell_interference = InterferenceModel.calculate_cell_interference_matrix(self.cells)
         for cid, cell in self.cells.items():
-            cell.current_load = round(cell.connected_users_count / max(cell.capacity, 1), 3)
+            connected_users = [u for u in self.users if u.serving_cell == cid and u.connection_status == "CONNECTED"]
+            cell.total_traffic_demand = round(sum(u.traffic_demand for u in connected_users), 2)
+            user_load = cell.connected_users_count / max(cell.capacity, 1)
+            traffic_load = cell.total_traffic_demand / max(getattr(cell, "capacity_mbps", 70.0), 1.0)
+            cell.current_load = round(min(1.0, max(user_load, traffic_load)), 3)
             cell.energy_consumption = EnergyModel.calculate_cell_energy(cell)
             cell.total_interference_caused = round(cell_interference.get(cid, 0.0), 3)
 
@@ -217,6 +243,19 @@ class NetworkEngine:
     def step(self) -> int:
         """
         Advances the simulation by one cycle.
+        Updates user traffic demand if a traffic provider is active.
         """
         self.cycle += 1
+        if hasattr(self, "traffic_provider") and self.traffic_provider is not None:
+            self.traffic_provider.update_cycle(self.users, self.cells, self.cycle)
+            self.recalculate()
         return self.cycle
+
+    def set_traffic_provider(self, provider: TrafficProvider) -> None:
+        """
+        Sets or updates the traffic demand provider and recalculates network state.
+        """
+        self.traffic_provider = provider
+        self.traffic_mode = provider.mode
+        self.traffic_provider.update_cycle(self.users, self.cells, self.cycle)
+        self.recalculate()

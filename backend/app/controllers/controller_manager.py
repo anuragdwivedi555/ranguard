@@ -17,6 +17,7 @@ class ControllerManager:
         self.energy_ctrl = EnergyController()
         self.coverage_ctrl = CoverageController()
         self.interference_ctrl = InterferenceController()
+        self.controllers = [self.energy_ctrl, self.coverage_ctrl, self.interference_ctrl]
 
     def generate_all_proposals(
         self,
