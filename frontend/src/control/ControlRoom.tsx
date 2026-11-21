@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, Clapperboard, MousePointerClick, Moon, ShieldCheck, Sun, X } from 'lucide-react';
-import { BenchmarkComparison, Cell, NetworkState } from '../types';
+import { BookOpen, CheckCircle2, Clapperboard, MousePointerClick, Moon, Sun, X, RotateCw, Crosshair } from 'lucide-react';
+import { BenchmarkComparison, Cell, NetworkMetrics, NetworkState } from '../types';
 import { DEFAULT_NETWORK_STATE } from '../data/defaultData';
 import { api } from '../services/api';
 import {
@@ -26,16 +26,17 @@ import {
   VERDICT_META,
 } from './model';
 import { Ghost, TowerField } from './scene/TowerField';
+import { Logo } from './Logo';
+import { ImpactGraph } from './impact';
 import {
   CellInspector,
-  DecisionLog,
+  InsightsPanel,
   KpiCompare,
   KpiStrip,
   LogEntry,
   PingPongLog,
   PingPongTimeline,
   PipelineStage,
-  PolicyBenchmark,
   RefereePipeline,
 } from './panels';
 import { DecisionStep, ProposalsStep, ResultStep, ScenarioStep, SimulatingStep, Stepper } from './workflow';
@@ -47,21 +48,29 @@ const FORK_MS = 520;
 type Phase = 'idle' | 'proposals' | 'simulating' | 'decision' | 'done' | 'pingpong';
 
 interface Props {
+  onHome: () => void;
   onOpenStory: () => void;
   onOpenMath: () => void;
 }
 
-export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
+export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath }) => {
   const [base, setBase] = useState<NetworkState>(DEFAULT_NETWORK_STATE);
   const [phase, setPhase] = useState<Phase>('idle');
   const [busy, setBusy] = useState(false);
   const [backend, setBackend] = useState<'checking' | 'live' | 'offline'>('checking');
   const [night, setNight] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [spin, setSpin] = useState(true);
+  const [viewNonce, setViewNonce] = useState(0);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [history, setHistory] = useState<NetworkMetrics[]>([DEFAULT_NETWORK_STATE.metrics]);
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [stats, setStats] = useState({ decisions: 0, unsafeBlocked: 0, reversalsBlocked: 0, reversals: 0 });
   const [bench, setBench] = useState<{ data: BenchmarkComparison; live: boolean }>({ data: OFFLINE_BENCHMARK, live: false });
+  const [benchOpts, setBenchOpts] = useState({ seed: 42, cycles: 4 });
+  const [benchBusy, setBenchBusy] = useState(false);
 
   // operator-review flow
   const [scenarioId, setScenarioId] = useState<ScenarioId | null>(null);
@@ -161,6 +170,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
       const o = await commitChoice(prepared, chosenId);
       setOutcome(o);
       setBase(o.after);
+      setHistory((h) => [...h, o.metrics]);
       setPhase('done');
       const cand = review.candidates.find((c) => c.candidate_id === chosenId);
       setStats((s) => ({ ...s, decisions: s.decisions + 1, unsafeBlocked: s.unsafeBlocked + review.candidates.filter((c) => !c.is_safe).length }));
@@ -219,6 +229,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
     if (!ping || !pingDone || loggedPing.current === ping.runId) return;
     loggedPing.current = ping.runId;
     setBase(ping.after);
+    setHistory((h) => [...h, ping.afterMetrics]);
     const powers = [ping.cycles[0]?.command.current_value ?? 38, ...ping.cycles.map((c) => c.resulting_power)];
     const last = ping.cycles[ping.cycles.length - 1];
     setStats((s) => ({
@@ -240,6 +251,13 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
     ]);
   }, [pingDone, ping]);
 
+  const rerunBench = useCallback(async (seed: number, cycles: number) => {
+    setBenchBusy(true);
+    setBenchOpts({ seed, cycles });
+    setBench(await loadBenchmark(seed, cycles));
+    setBenchBusy(false);
+  }, []);
+
   const handleRun = (id: ScenarioId) => (id === 'PING_PONG' ? startPing() : startReview(id));
 
   const reset = useCallback(async () => {
@@ -255,6 +273,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
     setError(null);
     const r = await resetNetwork();
     setBase(r.state);
+    setHistory([r.state.metrics]);
     setBackend(r.live ? 'live' : 'offline');
     setStats({ decisions: 0, unsafeBlocked: 0, reversalsBlocked: 0, reversals: 0 });
     setLog([]);
@@ -273,6 +292,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
 
   /* ───────── derived data for the scene ───────── */
   const inspected = review?.candidates.find((c) => c.candidate_id === inspectedId) ?? null;
+  const previewed = review?.candidates.find((c) => c.candidate_id === (hoverId ?? inspectedId)) ?? null;
   const chosen = review?.candidates.find((c) => c.candidate_id === chosenId) ?? null;
   const focusCell = scenarioId ? SCENARIOS[scenarioId].focus : null;
 
@@ -298,15 +318,15 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
     if (!prepared) return empty;
     const spike = prepared.id === 'TRAFFIC_SPIKE' ? 'CELL_02' : null;
     if (phase === 'done' && outcome) return { ...empty, state: outcome.after, spike };
-    if (phase === 'decision' && inspected) {
-      const color = inspected.is_safe ? '#60a5fa' : '#f87171';
+    if (phase === 'decision' && previewed) {
+      const color = previewed.is_safe ? '#ffb347' : '#f87171';
       return {
         state: prepared.before,
-        ghosts: inspected.changes.map((ch) => ({
+        ghosts: previewed.changes.map((ch) => ({
           cellId: ch.cell_id,
           powerDbm: ch.to_status === 'SHUTDOWN' ? 0 : ch.to_dbm,
           color,
-          label: `Fork ${inspected.label}: ${ch.to_status === 'SHUTDOWN' ? 'switched off' : `${fmt(ch.to_dbm, 1)} dBm`}${inspected.is_safe ? '' : ' · blocked'}`,
+          label: `Fork ${previewed.label}: ${ch.to_status === 'SHUTDOWN' ? 'switched off' : `${fmt(ch.to_dbm, 1)} dBm`}${previewed.is_safe ? '' : ' · blocked'}`,
         })),
         contested: [],
         spike,
@@ -324,7 +344,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
       contested: [...new Set(prepared.commands.map((c) => c.target_cell))],
       spike,
     };
-  }, [base, phase, prepared, ping, pingStage, pingDone, inspected, outcome]);
+  }, [base, phase, prepared, ping, pingStage, pingDone, previewed, outcome]);
 
   /* ───────── ping-pong pipeline stages ───────── */
   const pingStages: PipelineStage[] = useMemo(() => {
@@ -332,7 +352,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
     const list: PipelineStage[] = ping.cycles.map((c) => ({
       key: `c${c.cycle}`,
       title: `Cycle ${c.cycle} · ${CONTROLLER_META[c.command.controller_id].label} → ${fmt(c.command.proposed_value, 0)} dBm`,
-      icon: <span className="text-[10px] font-bold cr-mono">{c.cycle}</span>,
+      icon: <span className="text-[11.5px] font-bold cr-mono">{c.cycle}</span>,
       tone: c.verdict === 'APPROVE' ? 'ok' : 'warn',
       output: (
         <span>
@@ -357,6 +377,20 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
 
   const step = phase === 'idle' ? 0 : phase === 'proposals' ? 1 : phase === 'simulating' ? 2 : phase === 'decision' ? 3 : phase === 'done' ? 4 : pingDone ? 4 : 2;
 
+  const canGo = (i: number) =>
+    !busy && ((i === 0 && step > 0) || (i === 1 && !!prepared && (phase === 'simulating' || phase === 'decision')));
+  const goStep = (i: number) => {
+    if (i === 0) backToStart();
+    if (i === 1 && prepared) {
+      setPhase('proposals');
+      setReview(null);
+      setRevealed(0);
+      setChosenId(null);
+      setInspectedId(null);
+      setHoverId(null);
+    }
+  };
+
   const sceneTitle =
     phase === 'idle'
       ? 'Live network — all controllers idle'
@@ -371,8 +405,8 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
       : phase === 'simulating'
         ? 'Testing every option on a private copy'
         : phase === 'decision'
-          ? inspected
-            ? `Previewing Fork ${inspected.label} — dashed ring is the predicted coverage`
+          ? previewed
+            ? `Previewing Fork ${previewed.label}${hoverId ? ' (hover)' : ''} — dashed ring is the predicted coverage`
             : 'Pick an action'
           : phase === 'done'
             ? 'Decision applied — network updated'
@@ -388,23 +422,17 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
   return (
     <div className="cr-root min-h-screen text-slate-100">
       {/* ───────── Header ───────── */}
-      <header className="sticky top-0 z-30 border-b border-white/[0.07] bg-[#0a0f1a]/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-white/[0.07] bg-[#0f0d1c]/95 backdrop-blur">
         <div className="max-w-[1500px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-8 h-8 rounded-lg bg-sky-400 grid place-items-center">
-              <ShieldCheck className="w-[18px] h-[18px] text-slate-900" strokeWidth={2.4} />
-            </div>
-            <div className="leading-tight">
-              <div className="font-bold tracking-tight text-[15.5px]">RANGUARD</div>
-              <div className="text-[11px] text-slate-400">Network controller arbitration</div>
-            </div>
-          </div>
+          <button onClick={onHome} className="shrink-0 flex items-center" title="Back to welcome page" aria-label="RANGUARD home">
+            <Logo height={38} />
+          </button>
 
-          <Stepper step={step} />
+          <Stepper step={step} canGo={canGo} onStep={goStep} />
 
           <div className="flex items-center gap-2 shrink-0">
             <span
-              className={`hidden sm:flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 py-1 rounded-full border ${
+              className={`hidden sm:flex items-center gap-1.5 text-[13px] font-medium px-2.5 py-1 rounded-full border ${
                 backend === 'live' ? 'text-emerald-300 border-emerald-400/30 bg-emerald-400/10' : 'text-slate-300 border-white/10 bg-white/[0.04]'
               }`}
               title={backend === 'offline' ? 'Backend not reachable — replaying recorded seed-42 engine outputs' : 'Connected to the FastAPI engine'}
@@ -412,13 +440,13 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
               <span className={`w-1.5 h-1.5 rounded-full ${backend === 'live' ? 'bg-emerald-400' : 'bg-slate-400'}`} />
               {backend === 'live' ? 'Live engine' : backend === 'offline' ? 'Offline replay' : 'Connecting…'}
             </span>
-            <button onClick={onOpenMath} className="flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300">
+            <button onClick={onOpenMath} className="flex items-center gap-1.5 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300">
               <BookOpen className="w-3.5 h-3.5" /> <span className="hidden md:inline">Math</span>
             </button>
-            <button onClick={onOpenStory} className="flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300">
+            <button onClick={onOpenStory} className="flex items-center gap-1.5 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300">
               <Clapperboard className="w-3.5 h-3.5" /> <span className="hidden md:inline">3D story</span>
             </button>
-            <button onClick={reset} disabled={busy} className="text-[12.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300 disabled:opacity-50" title="Reset network to seed 42 and clear session stats">
+            <button onClick={reset} disabled={busy} className="text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300 disabled:opacity-50" title="Reset network to seed 42 and clear session stats">
               Reset
             </button>
           </div>
@@ -427,7 +455,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
 
       <main className="max-w-[1500px] mx-auto px-4 md:px-6 py-5 space-y-4">
         {error && (
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-rose-400/35 bg-rose-500/10 px-4 py-2.5 text-[13px] text-rose-100">
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-rose-400/35 bg-rose-500/10 px-4 py-2.5 text-[14px] text-rose-100">
             <span>{error}</span>
             <button onClick={() => setError(null)} aria-label="Dismiss">
               <X className="w-4 h-4" />
@@ -436,6 +464,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
         )}
 
         <KpiStrip
+          history={history}
           committed={liveMetrics}
           predicted={predictedMetrics}
           reversals={stats.reversals}
@@ -458,14 +487,14 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
                 ghosts={view.ghosts}
                 spikeCell={view.spike}
                 night={night}
-                autoRotate={phase === 'idle' && !selectedCell}
+                autoRotate={spin && phase === 'idle' && !selectedCell}
+                viewNonce={viewNonce}
               />
 
               <div className="absolute top-4 left-4 max-w-[62%] pointer-events-none">
-                <div className="rounded-lg bg-[#0a0f1a]/85 border border-white/10 px-3.5 py-2.5">
-                  <div className="text-[11px] text-slate-400">Simulated network · 6 towers · {view.state.users.length} users</div>
-                  <div className="text-[14.5px] font-semibold text-slate-100 mt-0.5">{sceneTitle}</div>
-                  <div className="text-[12px] text-slate-400 mt-0.5">{sceneSub}</div>
+                <div className="rounded-lg bg-[#0f0d1c]/85 border border-white/10 px-3.5 py-2.5">
+                  <div className="text-[14px] font-semibold text-slate-100">{sceneTitle}</div>
+                  <div className="text-[13px] text-slate-400 mt-0.5" title={`Simulated network · 6 towers · ${view.state.users.length} users`}>{sceneSub}</div>
                 </div>
               </div>
 
@@ -473,29 +502,50 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
                 {selected ? (
                   <CellInspector cell={selected} contested={view.contested.includes(selected.cell_id)} onClose={() => setSelectedCell(null)} />
                 ) : (
-                  <div className="hidden md:flex items-center gap-1.5 text-[11.5px] text-slate-300 rounded-lg bg-[#0a0f1a]/80 border border-white/10 px-2.5 py-1.5 pointer-events-none">
-                    <MousePointerClick className="w-3.5 h-3.5" /> Click a tower · drag to orbit · scroll to zoom
+                  <div className="hidden md:flex items-center gap-1.5 text-[12.5px] text-slate-400 rounded-lg bg-[#0f0d1c]/70 border border-white/10 px-2.5 py-1.5 pointer-events-none">
+                    <MousePointerClick className="w-3.5 h-3.5" /> Click tower · drag · scroll
                   </div>
                 )}
               </div>
 
-              <div className="absolute bottom-4 left-4 rounded-lg bg-[#0a0f1a]/85 border border-white/10 px-3 py-2 text-[11px] text-slate-300 flex flex-wrap gap-x-3.5 gap-y-1 max-w-[calc(100%-80px)] pointer-events-none">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" />Healthy</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" />Warning</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400" />Unsafe</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full bg-sky-100" />User</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full bg-rose-500" />Uncovered</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-slate-200" />Proposed coverage</span>
+              <div className="absolute bottom-4 left-4 flex items-end gap-2">
+                <button
+                  onClick={() => setLegendOpen((o) => !o)}
+                  className="h-9 px-3 rounded-lg bg-[#0f0d1c]/85 border border-white/10 hover:bg-white/10 text-[13px] font-medium text-slate-200"
+                  aria-expanded={legendOpen}
+                >
+                  {legendOpen ? 'Hide legend' : 'Legend'}
+                </button>
+                {legendOpen && (
+                  <div className="cr-fade-in rounded-lg bg-[#0f0d1c]/90 border border-white/10 px-3 py-2 text-[12.5px] text-slate-300 flex flex-wrap gap-x-3.5 gap-y-1 max-w-[460px]">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" />Healthy</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" />Warning</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400" />Unsafe</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full bg-sky-100" />User</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-1 rounded-full bg-rose-500" />Uncovered</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-slate-200" />Proposed coverage</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-orange-300/40" />Overlap = interference</span>
+                  </div>
+                )}
               </div>
 
-              <button
-                onClick={() => setNight((n) => !n)}
-                className="absolute bottom-4 right-4 w-9 h-9 grid place-items-center rounded-lg bg-[#0a0f1a]/85 border border-white/10 hover:bg-white/10 text-slate-200"
-                title={night ? 'Daylight' : 'Night'}
-                aria-label="Toggle night mode"
-              >
-                {night ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </button>
+              <div className="absolute bottom-4 right-4 flex gap-1.5">
+                {[
+                  { k: 'spin', label: spin ? 'Pause auto-rotate' : 'Auto-rotate', on: spin, icon: <RotateCw className="w-4 h-4" />, run: () => setSpin((x) => !x) },
+                  { k: 'view', label: 'Reset camera', on: false, icon: <Crosshair className="w-4 h-4" />, run: () => setViewNonce((n) => n + 1) },
+                  { k: 'night', label: night ? 'Daylight' : 'Night', on: night, icon: night ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />, run: () => setNight((n) => !n) },
+                ].map((b) => (
+                  <button
+                    key={b.k}
+                    onClick={b.run}
+                    title={b.label}
+                    aria-label={b.label}
+                    className={`cr-lift w-9 h-9 grid place-items-center rounded-lg border text-slate-100 ${b.on ? 'bg-sky-400/25 border-sky-300/50' : 'bg-[#0f0d1c]/85 border-white/15 hover:bg-white/10'}`}
+                  >
+                    {b.icon}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -527,6 +577,20 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
           </div>
         </div>
 
+        {/* ───────── Impact graph (PRD stage 02) ───────── */}
+        {prepared && phase !== 'idle' && phase !== 'pingpong' && (
+          <ImpactGraph
+            commands={prepared.commands}
+            cells={prepared.before.cells}
+            conflicts={conflicts}
+            fork={
+              (phase === 'decision' ? previewed : phase === 'done' ? chosen : null)
+                ? { label: `Fork ${(phase === 'decision' ? previewed : chosen)!.label}`, changes: (phase === 'decision' ? previewed : chosen)!.changes }
+                : null
+            }
+          />
+        )}
+
         {/* ───────── Shadow simulation workbench ───────── */}
         {showWorkbench && (
           <ShadowWorkbench
@@ -539,6 +603,7 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
             locked={phase === 'done'}
             onChoose={choose}
             onInspect={setInspectedId}
+            onHover={setHoverId}
           />
         )}
 
@@ -553,30 +618,12 @@ export const ControlRoom: React.FC<Props> = ({ onOpenStory, onOpenMath }) => {
           </div>
         )}
 
-        {phase === 'done' && outcome && prepared ? (
-          <>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-              <div className="lg:col-span-7">
-                <KpiCompare before={prepared.before.metrics} predicted={chosen?.predicted_metrics ?? null} after={outcome.metrics} committed />
-              </div>
-              <div className="lg:col-span-5">
-                <DecisionLog entries={log} />
-              </div>
-            </div>
-            <PolicyBenchmark data={bench.data} live={bench.live} />
-          </>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <div className="lg:col-span-8">
-              <PolicyBenchmark data={bench.data} live={bench.live} />
-            </div>
-            <div className="lg:col-span-4">
-              <DecisionLog entries={log} />
-            </div>
-          </div>
+        {phase === 'done' && outcome && prepared && (
+          <KpiCompare before={prepared.before.metrics} predicted={chosen?.predicted_metrics ?? null} after={outcome.metrics} committed />
         )}
+        <InsightsPanel bench={bench.data} live={bench.live} log={log} busy={benchBusy} seed={benchOpts.seed} cycles={benchOpts.cycles} onRerun={rerunBench} />
 
-        <footer className="pt-2 pb-6 text-center text-[11.5px] text-slate-500">
+        <footer className="pt-2 pb-6 text-center text-[13px] text-slate-500">
           RANGUARD v1.0 · Conflict-resolution referee for mobile network controllers · Team Arigato Algorithms · SW-31
         </footer>
       </main>

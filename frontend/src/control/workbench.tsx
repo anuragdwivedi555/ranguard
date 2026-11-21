@@ -14,9 +14,9 @@ import {
 /* ── tiny pieces ── */
 
 const Pill: React.FC<{ tone: 'good' | 'bad' | 'info' | 'muted' | 'warn'; children: React.ReactNode }> = ({ tone, children }) => {
-  const c = { good: '#4ade80', bad: '#f87171', info: '#60a5fa', muted: '#94a3b8', warn: '#f5b942' }[tone];
+  const c = { good: '#4ade80', bad: '#f87171', info: '#ff9a3d', muted: '#94a3b8', warn: '#f5b942' }[tone];
   return (
-    <span className="inline-flex items-center gap-1 rounded px-1.5 py-[2px] text-[11px] font-semibold" style={{ color: c, background: `${c}1a`, border: `1px solid ${c}33` }}>
+    <span className="inline-flex items-center gap-1 rounded px-1.5 py-[2px] text-[12.5px] font-semibold" style={{ color: c, background: `${c}1a`, border: `1px solid ${c}33` }}>
       {children}
     </span>
   );
@@ -60,13 +60,16 @@ const ForkRow: React.FC<{
   locked: boolean;
   onChoose: () => void;
   onInspect: () => void;
-}> = ({ cand, maxScore, chosen, inspected, applied, locked, onChoose, onInspect }) => {
+  onHover: (on: boolean) => void;
+}> = ({ cand, maxScore, chosen, inspected, applied, locked, onChoose, onInspect, onHover }) => {
   const m = cand.predicted_metrics;
   const failed = cand.checks.filter((c) => !c.passed);
   return (
     <div
       onClick={onInspect}
-      className={`cr-fade-in relative rounded-lg border px-3.5 py-3 cursor-pointer transition-colors ${
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      className={`cr-fade-in cr-lift relative rounded-lg border px-3.5 py-2.5 cursor-pointer ${
         inspected ? 'border-sky-400/60 bg-sky-400/[0.05]' : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20'
       } ${applied ? '!border-emerald-400/60 !bg-emerald-400/[0.06]' : ''}`}
     >
@@ -87,7 +90,7 @@ const ForkRow: React.FC<{
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="w-5 h-5 rounded bg-white/[0.08] text-[11px] font-bold grid place-items-center text-slate-200">{cand.label}</span>
+            <span className="w-5 h-5 rounded bg-white/[0.08] text-[12.5px] font-bold grid place-items-center text-slate-200">{cand.label}</span>
             <span className="text-[13.5px] font-semibold text-slate-100">{prettyText(cand.description)}</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -109,17 +112,18 @@ const ForkRow: React.FC<{
             {applied && <Pill tone="good">Applied to live network</Pill>}
           </div>
 
-          <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11.5px]">
+          <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[12.5px]">
             {[
-              { k: 'Coverage', v: `${fmt(m.coverage_percentage, 1)}%`, d: <Delta value={cand.deltas.coverage} goodWhen="up" unit=" pts" />, bad: !cand.checks.find((c) => c.key === 'coverage')?.passed },
-              { k: 'Energy', v: `${fmt(m.total_energy, 1)} u`, d: <Delta value={cand.deltas.energy_pct} goodWhen="down" unit="%" />, bad: false },
-              { k: 'Avg SINR', v: `${fmt(m.avg_sinr_db, 1)} dB`, d: <Delta value={cand.deltas.sinr} goodWhen="up" unit=" dB" digits={2} />, bad: false },
-              { k: 'Interference', v: fmt(m.interference_level, 0), d: <Delta value={cand.deltas.interference} goodWhen="down" digits={0} />, bad: false },
+              { k: 'Coverage', v: `${fmt(m.coverage_percentage, 1)}%`, d: <Delta value={cand.deltas.coverage} goodWhen="up" /> , bad: !cand.checks.find((c) => c.key === 'coverage')?.passed },
+              { k: 'Energy', v: `${fmt(m.total_energy, 1)}`, d: <Delta value={cand.deltas.energy_pct} goodWhen="down" unit="%" />, bad: false },
+              { k: 'SINR', v: `${fmt(m.avg_sinr_db, 1)}`, d: <Delta value={cand.deltas.sinr} goodWhen="up" digits={2} />, bad: false },
+              { k: 'Interf.', v: fmt(m.interference_level, 0), d: <Delta value={cand.deltas.interference} goodWhen="down" digits={0} />, bad: false },
             ].map((x) => (
-              <div key={x.k} className={`rounded-md px-2 py-1.5 ${x.bad ? 'bg-rose-500/10 border border-rose-400/30' : 'bg-white/[0.03] border border-white/[0.05]'}`}>
-                <div className="text-slate-500">{x.k}</div>
-                <div className="cr-mono text-slate-100 text-[12.5px] font-semibold">{x.v}</div>
-                <div className="cr-mono text-[11px]">{x.d}</div>
+              <div key={x.k} className={`rounded-md px-2 py-1 flex items-baseline justify-between gap-1.5 ${x.bad ? 'bg-rose-500/10 border border-rose-400/30' : 'bg-white/[0.03] border border-white/[0.05]'}`}>
+                <span className="text-slate-500">{x.k}</span>
+                <span className="cr-mono whitespace-nowrap">
+                  <span className="text-slate-100 font-semibold">{x.v}</span> <span className="text-[12px]">{x.d}</span>
+                </span>
               </div>
             ))}
           </div>
@@ -128,14 +132,14 @@ const ForkRow: React.FC<{
             <div className="flex-1">
               <ScoreBar cand={cand} max={maxScore} />
             </div>
-            <div className="cr-mono text-[12.5px] w-[92px] text-right">
+            <div className="cr-mono text-[13.5px] w-[92px] text-right">
               {cand.score !== null ? (
                 <>
-                  <span className="text-slate-500 text-[11px]">score </span>
+                  <span className="text-slate-500 text-[12.5px]">score </span>
                   <span className="font-bold text-slate-100">{cand.score.toFixed(3)}</span>
                 </>
               ) : (
-                <span className="text-rose-300 text-[11.5px]">not scored</span>
+                <span className="text-rose-300 text-[13px]">not scored</span>
               )}
             </div>
           </div>
@@ -148,9 +152,9 @@ const ForkRow: React.FC<{
 /* ── calculation inspector ── */
 
 const Section: React.FC<{ title: string; children: React.ReactNode; right?: React.ReactNode }> = ({ title, children, right }) => (
-  <div className="mt-4 first:mt-0">
+  <div className="mt-3 first:mt-0">
     <div className="flex items-center justify-between mb-1.5">
-      <div className="text-[11.5px] font-semibold text-slate-400 uppercase tracking-wide">{title}</div>
+      <div className="text-[13px] font-semibold text-slate-400 uppercase tracking-wide">{title}</div>
       {right}
     </div>
     {children}
@@ -160,7 +164,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode; right?: Reac
 export const CalculationInspector: React.FC<{ review: ReviewData; cand: ReviewCandidate | null; best: ReviewCandidate | null }> = ({ review, cand, best }) => {
   if (!cand) {
     return (
-      <div className="h-full grid place-items-center text-center px-6 py-10 text-[13px] text-slate-500">
+      <div className="h-full grid place-items-center text-center px-6 py-10 text-[14px] text-slate-500">
         <div>
           <Calculator className="w-6 h-6 mx-auto mb-2 text-slate-600" />
           Click any fork to see exactly how its numbers and score were calculated.
@@ -181,27 +185,27 @@ export const CalculationInspector: React.FC<{ review: ReviewData; cand: ReviewCa
   const trade = best && best.candidate_id !== cand.candidate_id ? tradeoffs(cand, best) : [];
   const total = cand.score_terms.reduce((a, t) => a + t.contribution, 0);
   return (
-    <div key={cand.candidate_id} className="cr-fade-in p-4">
+    <div key={cand.candidate_id} className="cr-fade-in p-3.5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11.5px] text-slate-500">Calculation for</div>
+          <div className="text-[13px] text-slate-500">Calculation for</div>
           <div className="text-[14.5px] font-semibold text-slate-100 leading-snug">
             Fork {cand.label} — {prettyText(cand.description)}
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className="cr-mono text-[10.5px] text-slate-500">simulated in</div>
-          <div className="cr-mono text-[12px] text-slate-300">{cand.sim_ms.toFixed(2)} ms</div>
+          <div className="cr-mono text-[12px] text-slate-500">simulated in</div>
+          <div className="cr-mono text-[13px] text-slate-300">{cand.sim_ms.toFixed(2)} ms</div>
         </div>
       </div>
 
       <Section title="1 · What this fork changes">
         {cand.changes.length === 0 ? (
-          <div className="text-[12.5px] text-slate-300">Nothing — the live network is left exactly as it is.</div>
+          <div className="text-[13.5px] text-slate-300">Nothing — the live network is left exactly as it is.</div>
         ) : (
           <div className="space-y-1">
             {cand.changes.map((ch) => (
-              <div key={ch.cell_id} className="cr-mono text-[12.5px] text-slate-200 rounded bg-white/[0.04] px-2.5 py-1.5">
+              <div key={ch.cell_id} className="cr-mono text-[13.5px] text-slate-200 rounded bg-white/[0.04] px-2.5 py-1.5">
                 {changeLabel(ch)}
               </div>
             ))}
@@ -210,12 +214,12 @@ export const CalculationInspector: React.FC<{ review: ReviewData; cand: ReviewCa
       </Section>
 
       <Section title="2 · Recomputed network (live → fork)">
-        <div className="rounded-lg border border-white/[0.07] overflow-hidden text-[12.5px]">
+        <div className="rounded-lg border border-white/[0.07] overflow-hidden text-[13.5px]">
           {rows.map((r, i) => {
             const diff = r.to - r.from;
             const good = Math.abs(diff) < 1e-6 ? null : r.good === 'up' ? diff > 0 : diff < 0;
             return (
-              <div key={r.k} className={`grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-1.5 items-center ${i % 2 ? 'bg-white/[0.02]' : ''}`}>
+              <div key={r.k} className={`grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-1 items-center ${i % 2 ? 'bg-white/[0.02]' : ''}`}>
                 <span className="text-slate-400">{r.k}</span>
                 <span className="cr-mono text-slate-500">{fmt(r.from, r.d)}</span>
                 <span className="text-slate-600">→</span>
@@ -227,21 +231,19 @@ export const CalculationInspector: React.FC<{ review: ReviewData; cand: ReviewCa
             );
           })}
         </div>
-        <div className="text-[11px] text-slate-500 mt-1.5">
-          Signal, interference and load were recalculated for all {m.connected_users} users on an isolated clone of the network.
-        </div>
+        <div className="text-[12px] text-slate-500 mt-1">Recalculated for all {m.connected_users} users on an isolated clone.</div>
       </Section>
 
       <Section
         title="3 · Safety guardrails"
         right={cand.is_safe ? <Pill tone="good">PASS</Pill> : <Pill tone="bad">FAIL</Pill>}
       >
-        <div className="rounded-lg border border-white/[0.07] overflow-hidden text-[12.5px]">
+        <div className="rounded-lg border border-white/[0.07] overflow-hidden text-[13.5px]">
           {cand.checks.map((c, i) => (
-            <div key={c.key} className={`grid grid-cols-[18px_1fr_auto_auto] gap-2.5 px-3 py-1.5 items-center ${i % 2 ? 'bg-white/[0.02]' : ''} ${c.passed ? '' : 'bg-rose-500/[0.07]'}`}>
+            <div key={c.key} className={`grid grid-cols-[18px_1fr_auto_auto] gap-2.5 px-3 py-1 items-center ${i % 2 ? 'bg-white/[0.02]' : ''} ${c.passed ? '' : 'bg-rose-500/[0.07]'}`}>
               {c.passed ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <X className="w-3.5 h-3.5 text-rose-400" />}
               <span className="text-slate-300">{c.label}</span>
-              <span className="cr-mono text-slate-500 text-[11.5px]">{c.rule}</span>
+              <span className="cr-mono text-slate-500 text-[13px]">{c.rule}</span>
               <span className={`cr-mono font-semibold w-[84px] text-right ${c.passed ? 'text-slate-200' : 'text-rose-300'}`}>{c.value}</span>
             </div>
           ))}
@@ -250,10 +252,10 @@ export const CalculationInspector: React.FC<{ review: ReviewData; cand: ReviewCa
 
       <Section
         title="4 · Objective score"
-        right={cand.score !== null ? <span className="cr-mono text-[12px] text-slate-300">total {cand.score.toFixed(3)}</span> : undefined}
+        right={cand.score !== null ? <span className="cr-mono text-[13px] text-slate-300">total {cand.score.toFixed(3)}</span> : undefined}
       >
         {!cand.is_safe ? (
-          <div className="rounded-lg border border-rose-400/25 bg-rose-500/[0.06] px-3 py-2.5 text-[12.5px] text-rose-100/90 leading-relaxed">
+          <div className="rounded-lg border border-rose-400/25 bg-rose-500/[0.06] px-3 py-2.5 text-[13.5px] text-rose-100/90 leading-relaxed">
             <div className="flex items-center gap-1.5 font-semibold text-rose-300 mb-1">
               <ShieldAlert className="w-4 h-4" /> Disqualified — never scored
             </div>
@@ -261,21 +263,21 @@ export const CalculationInspector: React.FC<{ review: ReviewData; cand: ReviewCa
           </div>
         ) : (
           <>
-            <div className="rounded-lg border border-white/[0.07] overflow-hidden text-[12px]">
-              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-1.5 text-[10.5px] text-slate-500 bg-white/[0.03]">
+            <div className="rounded-lg border border-white/[0.07] overflow-hidden text-[13px]">
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-1.5 text-[12px] text-slate-500 bg-white/[0.03]">
                 <span>Objective · formula</span>
                 <span className="w-12 text-right">score</span>
                 <span className="w-10 text-right">weight</span>
                 <span className="w-14 text-right">points</span>
               </div>
               {cand.score_terms.map((t) => (
-                <div key={t.key} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 items-center border-t border-white/[0.05]">
+                <div key={t.key} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-1.5 items-center border-t border-white/[0.05]">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 text-slate-200 font-medium">
                       <span className="w-2 h-2 rounded-sm" style={{ background: TERM_COLOR[t.key] }} />
                       {t.label}
                     </div>
-                    <div className="cr-mono text-[10.5px] text-slate-500 mt-0.5 truncate" title={t.formula}>
+                    <div className="cr-mono text-[12px] text-slate-500 mt-0.5 truncate" title={t.formula}>
                       {t.formula} = {t.raw.toFixed(3)}
                       {Math.abs(t.raw) > 1 ? ' → clipped to ±1' : ''}
                     </div>
@@ -291,7 +293,7 @@ export const CalculationInspector: React.FC<{ review: ReviewData; cand: ReviewCa
               </div>
             </div>
             {cand.advisory_penalty > 0 && (
-              <div className="text-[11.5px] text-violet-300 mt-1.5">ML forecast penalty applied: −{cand.advisory_penalty.toFixed(0)}</div>
+              <div className="text-[13px] text-violet-300 mt-1.5">ML forecast penalty applied: −{cand.advisory_penalty.toFixed(0)}</div>
             )}
           </>
         )}
@@ -324,13 +326,15 @@ export const ShadowWorkbench: React.FC<{
   locked: boolean;
   onChoose: (id: string) => void;
   onInspect: (id: string) => void;
-}> = ({ review, revealed, total, chosenId, inspectedId, appliedId, locked, onChoose, onInspect }) => {
+  onHover: (id: string | null) => void;
+}> = ({ review, revealed, total, chosenId, inspectedId, appliedId, locked, onChoose, onInspect, onHover }) => {
   const cands = review?.candidates ?? [];
   const best = cands.find((c) => c.is_recommended) ?? null;
   const inspected = cands.find((c) => c.candidate_id === inspectedId) ?? null;
   const maxScore = Math.max(0.01, ...cands.map((c) => c.score ?? 0));
   const simulating = !review || revealed < total;
   const b = review?.baseline;
+  const [how, setHow] = React.useState(false);
 
   return (
     <section className="cr-panel overflow-hidden">
@@ -341,10 +345,18 @@ export const ShadowWorkbench: React.FC<{
           </div>
           <div>
             <h2 className="text-[15.5px] font-semibold text-slate-100">Shadow simulation</h2>
-            <p className="text-[12.5px] text-slate-400 max-w-[640px] leading-snug mt-0.5">
-              RANGUARD forks the live network into isolated copies, applies one candidate action to each, recalculates every user's signal, then checks the result against the safety limits.
-              <span className="text-slate-300"> Nothing here touches the real network until you apply an action.</span>
+            <p className="text-[13.5px] text-slate-400 leading-snug mt-0.5">
+              Every option is tried on a private copy of the live network — nothing goes live until you apply it.{' '}
+              <button onClick={() => setHow((h) => !h)} className="text-sky-300 hover:text-sky-200 font-medium">
+                {how ? 'Hide details' : 'How it works'}
+              </button>
             </p>
+            {how && (
+              <p className="cr-fade-in text-[13px] text-slate-400 max-w-[680px] leading-snug mt-1.5">
+                RANGUARD forks the live network into isolated copies and applies one candidate action to each. For every fork it recalculates each user's signal, interference and energy, then checks the result against the hard
+                safety limits. Safe forks are scored on energy (30%), interference (25%), coverage (25%) and smallest change (20%); unsafe forks are disqualified.
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -361,9 +373,9 @@ export const ShadowWorkbench: React.FC<{
             <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 mb-3 flex flex-wrap items-center gap-x-5 gap-y-1">
               <div className="flex items-center gap-2">
                 <CircleDot className="w-4 h-4 text-emerald-400" />
-                <span className="text-[13px] font-semibold text-slate-100">Live network (baseline)</span>
+                <span className="text-[14px] font-semibold text-slate-100">Live network (baseline)</span>
               </div>
-              <div className="cr-mono text-[11.5px] text-slate-400 flex flex-wrap gap-x-4">
+              <div className="cr-mono text-[13px] text-slate-400 flex flex-wrap gap-x-4">
                 <span>coverage {fmt(b.coverage_percentage, 1)}%</span>
                 <span>energy {fmt(b.total_energy, 1)} u</span>
                 <span>SINR {fmt(b.avg_sinr_db, 1)} dB</span>
@@ -390,9 +402,10 @@ export const ShadowWorkbench: React.FC<{
                       locked={locked || simulating}
                       onChoose={() => onChoose(c.candidate_id)}
                       onInspect={() => onInspect(c.candidate_id)}
+                      onHover={(on) => onHover(on ? c.candidate_id : null)}
                     />
                   ) : (
-                    <div className="rounded-lg border border-dashed border-white/10 px-4 py-5 flex items-center gap-3 text-[12.5px] text-slate-500">
+                    <div className="rounded-lg border border-dashed border-white/10 px-4 py-5 flex items-center gap-3 text-[13.5px] text-slate-500">
                       <span className="w-4 h-4 rounded-full border-2 border-sky-300 border-t-transparent cr-spin" />
                       Cloning network and simulating fork {String.fromCharCode(65 + i)}…
                     </div>
@@ -402,7 +415,7 @@ export const ShadowWorkbench: React.FC<{
             })}
           </div>
           {review && !simulating && (
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-slate-500">
               <span>Score = </span>
               {Object.entries(review.weights).map(([k, w]) => (
                 <span key={k} className="flex items-center gap-1">
@@ -419,7 +432,7 @@ export const ShadowWorkbench: React.FC<{
           {review && !simulating ? (
             <CalculationInspector review={review} cand={inspected} best={best} />
           ) : (
-            <div className="h-full grid place-items-center text-[13px] text-slate-500 py-12">Waiting for simulation to finish…</div>
+            <div className="h-full grid place-items-center text-[14px] text-slate-500 py-12">Waiting for simulation to finish…</div>
           )}
         </div>
       </div>

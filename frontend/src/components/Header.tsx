@@ -1,5 +1,6 @@
 import React from 'react';
-import { ShieldCheck, RefreshCw, Play, BarChart3, Radio, Calculator, Sparkles } from 'lucide-react';
+import { Logo } from '../control/Logo';
+import { RefreshCw, Play, BarChart3, Radio, Calculator, Sparkles } from 'lucide-react';
 
 interface HeaderProps {
   cycle: number;
@@ -32,22 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="bg-slate-900/95 border-b border-slate-800 px-4 sm:px-6 py-3 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
         {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 border border-cyan-400/30">
-            <ShieldCheck className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold tracking-wider text-lg text-white font-mono">RANGUARD</span>
-              <span className="px-2 py-0.5 text-[9px] font-semibold tracking-wide bg-cyan-950 text-cyan-400 border border-cyan-800 rounded font-mono">
-                SIMULATION LAB
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-sans hidden sm:block">
-              Autonomous Mobile Network Conflict-Resolution Referee
-            </p>
-          </div>
-        </div>
+        <Logo height={34} />
 
         {/* Live Simulation Meta */}
         <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono">
