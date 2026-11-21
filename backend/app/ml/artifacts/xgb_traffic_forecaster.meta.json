@@ -1,0 +1,35 @@
+{
+  "mode": "xgboost_delta",
+  "params": {
+    "n_estimators": 45,
+    "max_depth": 3,
+    "learning_rate": 0.035,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "reg_lambda": 4.0,
+    "reg_alpha": 0.5,
+    "random_state": 42,
+    "objective": "reg:squarederror",
+    "eval_metric": "rmse",
+    "n_jobs": 1
+  },
+  "feature_names": [
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_6",
+    "rolling_mean_3",
+    "rolling_std_3",
+    "rolling_mean_6",
+    "rolling_max_6",
+    "rolling_min_6",
+    "delta_1",
+    "delta_3",
+    "sin_interval",
+    "cos_interval",
+    "call_activity_lag1",
+    "sms_activity_lag1",
+    "square_id"
+  ],
+  "is_fitted": true
+}
