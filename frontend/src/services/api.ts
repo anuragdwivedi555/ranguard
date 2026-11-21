@@ -5,6 +5,8 @@ import {
   ControllerCommand,
   RefereeDecision,
   BenchmarkComparison,
+  MLStatus,
+  CellAdvisoryItem,
 } from '../types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8000/api';
@@ -76,6 +78,22 @@ export const api = {
   // Benchmark comparison
   runBenchmarkComparison: async (seed: number = 42, cycles: number = 4): Promise<BenchmarkComparison> => {
     const res = await client.post('/comparison/run', { seed, cycles });
+    return res.data;
+  },
+
+  // ML Traffic Advisory
+  getMLStatus: async (): Promise<MLStatus> => {
+    const res = await client.get('/ml/status');
+    return res.data;
+  },
+
+  toggleML: async (enabled: boolean): Promise<MLStatus> => {
+    const res = await client.post('/ml/toggle', { enabled });
+    return res.data;
+  },
+
+  getCellAdvisories: async (): Promise<CellAdvisoryItem[]> => {
+    const res = await client.get('/ml/advisories');
     return res.data;
   },
 };

@@ -131,6 +131,46 @@ export interface RefereeDecision {
   computation_time_ms: number;
   timestamp: number;
   committed: boolean;
+  predictive_advisory?: {
+    cell_id: string;
+    cycle: number;
+    ml_enabled: boolean;
+    model_loaded: boolean;
+    fallback_mode?: boolean;
+    current_activity_index: number;
+    predicted_activity_index: number;
+    trend_delta: number;
+    predicted_trend: 'SURGE' | 'STABLE' | 'DECLINE';
+    is_surge_predicted: boolean;
+    is_premature_power_cut: boolean;
+    advisory_signal: string;
+    explanation: string;
+    unit: string;
+  } | null;
+}
+
+export interface MLStatus {
+  ml_enabled: boolean;
+  model_loaded: boolean;
+  model_mode?: string | null;
+  feature_count: number;
+  units: string;
+  cache_entries: number;
+  status_message: string;
+}
+
+export interface CellAdvisoryItem {
+  cell_id: string;
+  cycle: number;
+  current_activity_index: number;
+  predicted_activity_index: number;
+  trend_delta: number;
+  predicted_trend: string;
+  is_surge_predicted: boolean;
+  is_premature_power_cut: boolean;
+  advisory_signal: string;
+  explanation: string;
+  unit: string;
 }
 
 export interface PolicyMetric {

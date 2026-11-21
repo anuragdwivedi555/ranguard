@@ -128,6 +128,13 @@ class NetworkEngine:
             )
             user_idx += 1
 
+        # Precompute static geometric path loss matrix between all users and cells
+        self._path_loss_cache: Dict[Tuple[str, str], float] = {}
+        for u in self.users:
+            for cid, cell in self.cells.items():
+                d = SignalModel.calculate_distance(u.x, u.y, cell.x, cell.y)
+                self._path_loss_cache[(u.user_id, cid)] = SignalModel.calculate_path_loss(d)
+
         # 3. Apply traffic provider demands if provider attached
         if hasattr(self, "traffic_provider") and self.traffic_provider is not None:
             self.traffic_provider.update_cycle(self.users, self.cells, self.cycle)
@@ -151,10 +158,15 @@ class NetworkEngine:
         for user in self.users:
             best_cell_id: Optional[str] = None
             best_rsrp = -140.0
+            u_id = user.user_id
 
             for cid, cell in active_cells.items():
-                dist = SignalModel.calculate_distance(user.x, user.y, cell.x, cell.y)
-                rsrp = SignalModel.calculate_rsrp(cell.tx_power_dbm, dist)
+                if hasattr(self, "_path_loss_cache") and (u_id, cid) in self._path_loss_cache:
+                    rsrp = cell.tx_power_dbm - self._path_loss_cache[(u_id, cid)]
+                else:
+                    dist = SignalModel.calculate_distance(user.x, user.y, cell.x, cell.y)
+                    rsrp = SignalModel.calculate_rsrp(cell.tx_power_dbm, dist)
+
                 if rsrp > best_rsrp:
                     best_rsrp = rsrp
                     best_cell_id = cid
@@ -173,9 +185,10 @@ class NetworkEngine:
                 user.is_adequately_served = False
 
         # Step C: SINR recalculation in linear units
+        pl_cache = getattr(self, "_path_loss_cache", None)
         for user in self.users:
             if user.connection_status == "CONNECTED" and user.serving_cell:
-                rsrp, sinr, _ = InterferenceModel.calculate_user_sinr(user, self.cells)
+                rsrp, sinr, _ = InterferenceModel.calculate_user_sinr(user, self.cells, path_loss_cache=pl_cache)
                 user.rsrp_dbm = round(rsrp, 2)
                 user.sinr_db = round(sinr, 2)
                 # Adequately served requirement: RSRP >= -95 dBm and SINR >= 0 dB
@@ -209,10 +222,14 @@ class NetworkEngine:
 
     def clone(self) -> "NetworkEngine":
         """
-        Creates an independent deep-copy snapshot of the simulation state for shadow simulation.
+        Creates an independent snapshot of the simulation state for shadow simulation.
         Does not mutate the active network.
+        Optimized by shallow copying immutable static lookups and fast-copying cell and user states.
         """
-        snapshot = copy.deepcopy(self)
+        snapshot = copy.copy(self)
+        snapshot.cells = {cid: copy.copy(c) for cid, c in self.cells.items()}
+        snapshot.users = [copy.copy(u) for u in self.users]
+        snapshot.metrics = copy.copy(self.metrics) if self.metrics else None
         return snapshot
 
     def apply_action(self, cell_id: str, tx_power_dbm: Optional[float] = None, status: Optional[str] = None) -> None:

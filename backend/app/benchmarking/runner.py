@@ -100,6 +100,7 @@ class RunRecord(BaseModel):
     decisions_modified: int = 0
     decisions_delayed: int = 0
     decisions_rejected: int = 0
+    ml_advisory_triggers_count: int = 0
 
 
 class BenchmarkRunner:
@@ -264,6 +265,7 @@ class BenchmarkRunner:
         within_cycle_revs: int = 0
         between_cycle_revs: int = 0
         proposed_revs: int = 0
+        advisory_triggers_count: int = 0
 
         if policy == PolicyType.RANGUARD:
             arbitrator = ArbitrationEngine()
@@ -341,6 +343,8 @@ class BenchmarkRunner:
                 v = decision.verdict
                 if v in verdict_counts:
                     verdict_counts[v] += 1
+                if decision.predictive_advisory and decision.predictive_advisory.get("is_premature_power_cut"):
+                    advisory_triggers_count += 1
 
             # End-of-cycle executed reversal tracking across physical base stations
             for cid, cell in net.cells.items():
@@ -400,6 +404,7 @@ class BenchmarkRunner:
             decisions_modified=verdict_counts["MODIFY"],
             decisions_delayed=verdict_counts["DELAY"],
             decisions_rejected=verdict_counts["REJECT"],
+            ml_advisory_triggers_count=advisory_triggers_count,
         )
 
     def run_matrix(self) -> List[RunRecord]:

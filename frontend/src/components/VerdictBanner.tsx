@@ -1,6 +1,6 @@
 import React from 'react';
 import { RefereeDecision } from '../types';
-import { ShieldCheck, Check, Edit3, Clock, X, CheckCircle, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Check, Edit3, Clock, X, CheckCircle, ArrowRight, Activity } from 'lucide-react';
 
 interface VerdictBannerProps {
   decision: RefereeDecision | null;
@@ -119,6 +119,39 @@ export const VerdictBanner: React.FC<VerdictBannerProps> = ({
               )}
             </div>
           </div>
+
+          {/* Predictive Traffic Advisory Card */}
+          {decision.predictive_advisory && decision.predictive_advisory.ml_enabled && (
+            <div className={`p-2.5 rounded border text-xs font-mono mt-1 ${
+              decision.predictive_advisory.is_premature_power_cut
+                ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
+                : 'bg-cyan-950/30 border-cyan-800/40 text-cyan-300'
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <span className="font-bold flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                  XGBOOST PREDICTIVE ADVISORY — CELL: {decision.predictive_advisory.cell_id}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  decision.predictive_advisory.predicted_trend === 'SURGE'
+                    ? 'bg-amber-500 text-slate-950'
+                    : decision.predictive_advisory.predicted_trend === 'DECLINE'
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'bg-slate-700 text-slate-200'
+                }`}>
+                  TREND: {decision.predictive_advisory.predicted_trend}
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed opacity-90">{decision.predictive_advisory.explanation}</p>
+              <div className="flex items-center gap-3 pt-1 text-[10px] text-slate-400">
+                <span>Observed Index: <b className="text-white">{decision.predictive_advisory.current_activity_index}</b></span>
+                <span>Forecast (10-min): <b className="text-cyan-400">{decision.predictive_advisory.predicted_activity_index}</b></span>
+                <span>Delta: <b className={decision.predictive_advisory.trend_delta >= 0 ? 'text-amber-400' : 'text-emerald-400'}>
+                  {decision.predictive_advisory.trend_delta >= 0 ? `+${decision.predictive_advisory.trend_delta}` : decision.predictive_advisory.trend_delta}
+                </b> activity units</span>
+              </div>
+            </div>
+          )}
 
           {/* Predicted Deltas */}
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-mono">

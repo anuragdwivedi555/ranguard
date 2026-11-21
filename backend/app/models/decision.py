@@ -61,3 +61,4 @@ class RefereeDecision(BaseModel):
     computation_time_ms: float = 0.0
     timestamp: float = Field(default_factory=time.time)
     committed: bool = False
+    predictive_advisory: Optional[Dict[str, Any]] = Field(default=None, description="ML traffic forecast and capacity advisory signal")

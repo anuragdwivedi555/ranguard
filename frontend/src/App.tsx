@@ -7,6 +7,7 @@ import {
   ConflictReport,
   BenchmarkComparison,
   CandidateAction,
+  MLStatus,
 } from './types';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
@@ -29,6 +30,7 @@ export default function App() {
   const [isBackendHealthy, setIsBackendHealthy] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [mlStatus, setMlStatus] = useState<MLStatus | null>(null);
 
   const showNotification = (msg: string) => {
     setNotification(msg);
@@ -56,6 +58,13 @@ export default function App() {
 
       const hist = await api.getRefereeHistory(20);
       setHistory(hist);
+
+      try {
+        const ml = await api.getMLStatus();
+        setMlStatus(ml);
+      } catch (e) {
+        // ML route optional fallback
+      }
     } catch (err) {
       console.error('Failed to refresh network state:', err);
       setIsBackendHealthy(false);
@@ -155,6 +164,22 @@ export default function App() {
     }
   };
 
+  // Handler: Toggle Predictive ML Advisory
+  const handleToggleML = async () => {
+    setIsLoading(true);
+    try {
+      const targetState = !(mlStatus?.ml_enabled ?? true);
+      const updated = await api.toggleML(targetState);
+      setMlStatus(updated);
+      await refreshNetworkData();
+      showNotification(`Predictive ML Advisory toggled ${updated.ml_enabled ? 'ON' : 'OFF'}.`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Derive active conflicts from evaluated decision or command pairs
   const conflicts: ConflictReport[] = [];
   if (commands.length > 1 && networkState) {
@@ -226,6 +251,8 @@ export default function App() {
         cycle={networkState?.cycle || 1}
         stateVersion={networkState?.state_version || 1}
         isBackendHealthy={isBackendHealthy}
+        mlEnabled={mlStatus?.ml_enabled ?? true}
+        onToggleML={handleToggleML}
         onReset={handleReset}
         onStep={handleStep}
         onRunBenchmark={handleRunBenchmark}

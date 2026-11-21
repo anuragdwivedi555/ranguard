@@ -11,6 +11,7 @@ from .candidate_generator import CandidateGenerator
 from .shadow_simulator import ShadowSimulator
 from .optimizer import ObjectiveOptimizer
 from .stability_manager import StabilityManager
+from ..ml.advisor import TrafficAdvisoryEngine
 
 
 class ArbitrationEngine:
@@ -18,12 +19,13 @@ class ArbitrationEngine:
     RANGUARD Core Arbitration Engine.
     Executes the INTERCEPT -> DETECT -> PREDICT -> SIMULATE -> VALIDATE -> ARBITRATE pipeline.
     """
-    def __init__(self):
+    def __init__(self, advisory_engine: Optional[TrafficAdvisoryEngine] = None):
         self.guardrails = SafetyGuardrails()
         self.conflict_detector = ConflictDetector()
         self.candidate_generator = CandidateGenerator()
         self.shadow_simulator = ShadowSimulator(self.guardrails)
         self.stability_manager = StabilityManager()
+        self.advisory_engine = advisory_engine or TrafficAdvisoryEngine.get_instance()
 
     def arbitrate(
         self,
@@ -62,8 +64,29 @@ class ArbitrationEngine:
                 computation_time_ms=comp_time,
             )
 
-        # Step 2: Conflict Detection
+        # Step 2: Conflict Detection & Traffic Advisory
         conflicts = self.conflict_detector.detect_conflicts(commands, live_network.cells)
+
+        advisory_reports: List[Dict[str, Any]] = []
+        has_premature_cut = False
+        primary_advisory: Optional[Dict[str, Any]] = None
+
+        for cmd in commands:
+            cell = live_network.cells.get(cmd.target_cell)
+            curr_pwr = cell.tx_power_dbm if cell else 38.0
+            d_val = -curr_pwr if cmd.action_type == "SHUTDOWN" else (cmd.proposed_value - curr_pwr)
+            adv = self.advisory_engine.get_cell_advisory(
+                cell_id=cmd.target_cell,
+                cycle=current_cycle,
+                traffic_provider=getattr(live_network, "traffic_provider", None),
+                proposed_action_type=cmd.action_type,
+                proposed_delta_dbm=d_val,
+            )
+            advisory_reports.append(adv)
+            if adv.get("is_premature_power_cut"):
+                has_premature_cut = True
+                if primary_advisory is None:
+                    primary_advisory = adv
 
         # Step 3: Candidate Generation
         candidate_defs = self.candidate_generator.generate_candidates(commands, live_network.cells)
@@ -78,8 +101,20 @@ class ArbitrationEngine:
             current_cells=live_network.cells,
         )
 
-        # Separate safe vs unsafe candidates
-        safe_candidates = [c for c in scored_candidates if c.is_safe]
+        # ML Advisory: If premature power cut detected during forecasted surge, penalize shutdown candidates
+        advisory_applied = False
+        if has_premature_cut and primary_advisory is not None:
+            target_cid = primary_advisory.get("cell_id")
+            for c in scored_candidates:
+                cell_act = c.joint_actions.get(target_cid)
+                if cell_act:
+                    # Penalize shutdown or extreme cut (power <= 28.0 dBm)
+                    if cell_act.get("status") == "SHUTDOWN" or cell_act.get("tx_power_dbm", 38.0) <= 28.0:
+                        c.objective_score -= 50.0
+                        advisory_applied = True
+
+        # Separate safe vs unsafe candidates, sorted by objective_score descending
+        safe_candidates = sorted([c for c in scored_candidates if c.is_safe], key=lambda x: x.objective_score, reverse=True)
         unsafe_candidates = [c for c in scored_candidates if not c.is_safe]
 
         # Step 7: Check Stability (Cooldown / Hysteresis) on primary proposed cells
@@ -145,7 +180,7 @@ class ArbitrationEngine:
                     is_original_approved = True
                     break
 
-            if is_original_approved and len(commands) == 1 and not conflicts:
+            if is_original_approved and len(commands) == 1 and not conflicts and not advisory_applied:
                 verdict = "APPROVE"
                 reason = (
                     f"Approved: Proposal from {commands[0].controller_id} on {commands[0].target_cell} is safe and beneficial. "
@@ -170,6 +205,14 @@ class ArbitrationEngine:
                     reason = (
                         f"Coordinated modification selected: {best_cand.description}. "
                         f"Achieves higher multi-objective score ({best_cand.objective_score:.3f}) than original proposals."
+                    )
+
+                if advisory_applied and primary_advisory:
+                    reason += (
+                        f" [Predictive Advisory: Prevented premature power cut on {primary_advisory['cell_id']} "
+                        f"due to forecasted traffic surge ({primary_advisory.get('current_activity_index', 0.0):.2f} -> "
+                        f"{primary_advisory.get('predicted_activity_index', 0.0):.2f} activity index). "
+                        f"Selected capacity-preserving compromise: {best_cand.description} to safeguard upcoming demand.]"
                     )
 
         # Rejected alternatives summary
@@ -198,6 +241,7 @@ class ArbitrationEngine:
             kpi_impact = {"coverage_delta": 0.0, "energy_delta": 0.0, "sinr_delta": 0.0, "interference_delta": 0.0}
 
         comp_time = round((time.perf_counter() - start_time) * 1000.0, 2)
+        chosen_advisory = primary_advisory if primary_advisory else (advisory_reports[0] if advisory_reports else None)
 
         return RefereeDecision(
             decision_id=f"DEC-{verdict}-{current_cycle}-{uuid.uuid4().hex[:4]}",
@@ -217,4 +261,5 @@ class ArbitrationEngine:
             controllers_involved=controllers_involved,
             state_version=state_version,
             computation_time_ms=comp_time,
+            predictive_advisory=chosen_advisory,
         )

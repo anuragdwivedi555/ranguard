@@ -18,24 +18,35 @@ class ShadowSimulator:
         candidate_definitions: List[Dict[str, Any]],
     ) -> List[CandidateAction]:
         evaluated_candidates: List[CandidateAction] = []
+        # Cache evaluations for identical joint action configurations
+        action_cache: Dict[tuple, Tuple[Any, bool, List[str]]] = {}
 
         for c_def in candidate_definitions:
-            # 1. Clone current network state
-            shadow_engine = live_network.clone()
-
-            # 2. Apply candidate action to the cloned instance
             joint_actions = c_def.get("joint_actions", {})
-            shadow_engine.apply_joint_actions(joint_actions)
+            action_sig = tuple(sorted(
+                (cid, act.get("status", "ACTIVE"), round(float(act.get("tx_power_dbm", 0.0)), 2))
+                for cid, act in joint_actions.items()
+            ))
 
-            # 3. Recalculated metrics are stored on shadow_engine.metrics
-            predicted_metrics = shadow_engine.metrics
+            if action_sig in action_cache:
+                predicted_metrics, is_safe, violated_constraints = action_cache[action_sig]
+            else:
+                # 1. Clone current network state
+                shadow_engine = live_network.clone()
 
-            # 4. Validate hard safety constraints
-            is_safe, violated_constraints = self.guardrails.validate_candidate(
-                predicted_metrics=predicted_metrics,
-                current_cells=live_network.cells,
-                proposed_actions=joint_actions,
-            )
+                # 2. Apply candidate action to the cloned instance
+                shadow_engine.apply_joint_actions(joint_actions)
+
+                # 3. Recalculated metrics are stored on shadow_engine.metrics
+                predicted_metrics = shadow_engine.metrics
+
+                # 4. Validate hard safety constraints
+                is_safe, violated_constraints = self.guardrails.validate_candidate(
+                    predicted_metrics=predicted_metrics,
+                    current_cells=live_network.cells,
+                    proposed_actions=joint_actions,
+                )
+                action_cache[action_sig] = (predicted_metrics, is_safe, violated_constraints)
 
             # Build explanation string
             if is_safe:

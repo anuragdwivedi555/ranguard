@@ -5,6 +5,8 @@ interface HeaderProps {
   cycle: number;
   stateVersion: number;
   isBackendHealthy: boolean;
+  mlEnabled?: boolean;
+  onToggleML?: () => void;
   onReset: () => void;
   onStep: () => void;
   onRunBenchmark: () => void;
@@ -15,6 +17,8 @@ export const Header: React.FC<HeaderProps> = ({
   cycle,
   stateVersion,
   isBackendHealthy,
+  mlEnabled = true,
+  onToggleML,
   onReset,
   onStep,
   onRunBenchmark,
@@ -58,6 +62,26 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-slate-500 mr-1.5">VERSION:</span>
             <span className="text-indigo-400 font-bold">v{stateVersion}</span>
           </div>
+
+          {/* ML Predictive Advisory Toggle Chip */}
+          {onToggleML && (
+            <button
+              onClick={onToggleML}
+              disabled={isLoading}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-mono transition active:scale-95 disabled:opacity-50 ${
+                mlEnabled
+                  ? 'bg-cyan-950/70 border-cyan-500/50 text-cyan-300 hover:bg-cyan-900/50 shadow-sm shadow-cyan-900/30'
+                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:bg-slate-800/60'
+              }`}
+              title="Toggle XGBoost predictive traffic advisory (Milan 10-min CDR activity index)"
+            >
+              <span className={`w-2 h-2 rounded-full ${mlEnabled ? 'bg-cyan-400 animate-pulse' : 'bg-slate-600'}`} />
+              <span className="text-slate-400">ML ADVISOR:</span>
+              <span className={`font-bold ${mlEnabled ? 'text-cyan-400' : 'text-slate-500'}`}>
+                {mlEnabled ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Controls */}
