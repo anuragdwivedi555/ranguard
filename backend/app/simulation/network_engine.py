@@ -45,6 +45,9 @@ class NetworkEngine:
             self.traffic_provider = MilanReplayTrafficProvider()
         else:
             self.traffic_provider = SyntheticTrafficProvider()
+        self.cycle_duration_seconds: float = 10.0
+        self.cumulative_energy_joules: float = 0.0
+        self.cumulative_energy_wh: float = 0.0
         self.initialize_network()
 
     def initialize_network(self) -> None:
@@ -54,6 +57,8 @@ class NetworkEngine:
         self.rng = np.random.RandomState(self.seed)
         self.cycle = 1
         self.state_version = 1
+        self.cumulative_energy_joules = 0.0
+        self.cumulative_energy_wh = 0.0
 
         # 1. Initialize 6 cells in a 2-tier grid across 2200m x 2000m
         cell_configs = [
@@ -194,7 +199,12 @@ class NetworkEngine:
             cell.total_interference_caused = round(cell_interference.get(cid, 0.0), 3)
 
         # Calculate network metrics
-        self.metrics = MetricsEngine.calculate_metrics(self.cells, self.users)
+        self.metrics = MetricsEngine.calculate_metrics(
+            self.cells,
+            self.users,
+            cumulative_energy_joules=self.cumulative_energy_joules,
+            cumulative_energy_wh=self.cumulative_energy_wh,
+        )
         return self.metrics
 
     def clone(self) -> "NetworkEngine":
@@ -243,12 +253,19 @@ class NetworkEngine:
     def step(self) -> int:
         """
         Advances the simulation by one cycle.
+        Accumulates energy consumed during the cycle (Power in Watts * cycle duration in seconds).
         Updates user traffic demand if a traffic provider is active.
         """
+        if self.metrics:
+            p_watts = self.metrics.total_energy
+            delta_joules = p_watts * self.cycle_duration_seconds
+            self.cumulative_energy_joules = round(self.cumulative_energy_joules + delta_joules, 3)
+            self.cumulative_energy_wh = round(self.cumulative_energy_joules / 3600.0, 5)
+
         self.cycle += 1
         if hasattr(self, "traffic_provider") and self.traffic_provider is not None:
             self.traffic_provider.update_cycle(self.users, self.cells, self.cycle)
-            self.recalculate()
+        self.recalculate()
         return self.cycle
 
     def set_traffic_provider(self, provider: TrafficProvider) -> None:

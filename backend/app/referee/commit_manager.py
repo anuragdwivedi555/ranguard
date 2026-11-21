@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 from ..simulation.state_manager import StateManager
 from ..models.decision import RefereeDecision
 from ..models.metrics import NetworkMetrics
@@ -12,10 +12,15 @@ class CommitManager:
     Manages transactional execution of validated decisions.
     Prevents stale state mutation and enforces rollback on validation failure.
     """
-    def __init__(self, guardrails: SafetyGuardrails, stability_manager: StabilityManager):
+    def __init__(
+        self,
+        guardrails: SafetyGuardrails,
+        stability_manager: StabilityManager,
+        history_service: Optional[HistoryService] = None,
+    ):
         self.guardrails = guardrails
         self.stability_manager = stability_manager
-        self.history_service = HistoryService.get_instance()
+        self.history_service = history_service or HistoryService.get_instance()
 
     def commit_decision(
         self,
