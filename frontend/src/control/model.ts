@@ -233,11 +233,10 @@ export async function runScenario(id: ScenarioId): Promise<ScenarioRun> {
   }
 }
 
-export async function loadBenchmark(): Promise<{ data: BenchmarkComparison; live: boolean }> {
+export async function loadBenchmark(seed = 42, cycles = 4): Promise<{ data: BenchmarkComparison; live: boolean }> {
   try {
-    const data = await api.runBenchmarkComparison(42, 4);
-    await api.resetSimulation(42).catch(() => undefined);
-    return { data, live: true };
+    // the benchmark runs on its own network copies, so the live network is left untouched
+    return { data: await api.runBenchmarkComparison(seed, cycles), live: true };
   } catch {
     return { data: OFFLINE_BENCHMARK, live: false };
   }
@@ -372,7 +371,7 @@ export const TERM_COLOR: Record<string, string> = {
   energy: '#2dd4bf',
   interference: '#c084fc',
   coverage: '#60a5fa',
-  change: '#f5b942',
+  change: '#f472b6',
 };
 
 export const prettyText = (s: string) => s.replace(/CELL_0?(\d+)/g, 'Cell $1');

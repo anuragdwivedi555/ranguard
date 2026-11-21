@@ -29,6 +29,7 @@ export interface TowerFieldProps {
   spikeCell: string | null;
   night: boolean;
   autoRotate: boolean;
+  viewNonce?: number;
 }
 
 function towerPos(cell: Cell): THREE.Vector3 {
@@ -135,7 +136,7 @@ const UserLayer: React.FC<{
 };
 
 /** Smoothly flies the camera to the focused tower and keeps orbit controls usable. */
-const CameraRig: React.FC<{ target: THREE.Vector3 | null; controls: React.RefObject<OrbitControlsImpl> }> = ({ target, controls }) => {
+const CameraRig: React.FC<{ target: THREE.Vector3 | null; controls: React.RefObject<OrbitControlsImpl>; nonce: number }> = ({ target, controls, nonce }) => {
   const { camera } = useThree();
   const flying = useRef(0);
   const goalPos = useRef(new THREE.Vector3(0, 9.5, 30));
@@ -150,7 +151,7 @@ const CameraRig: React.FC<{ target: THREE.Vector3 | null; controls: React.RefObj
       goalPos.current.set(0, 9.5, 30);
     }
     flying.current = 2.2;
-  }, [target]);
+  }, [target, nonce]);
 
   useFrame((_, dt) => {
     if (flying.current <= 0 || !controls.current) return;
@@ -166,6 +167,7 @@ const CameraRig: React.FC<{ target: THREE.Vector3 | null; controls: React.RefObj
 const SceneContents: React.FC<TowerFieldProps> = (props) => {
   const { cells, users, focusCell, selectedCell, onSelectCell, contested, ghosts, spikeCell, night, autoRotate } = props;
   const controls = useRef<OrbitControlsImpl>(null);
+  const [hoverCell, setHoverCell] = React.useState<string | null>(null);
   const list = useMemo(() => Object.values(cells).sort((a, b) => a.cell_id.localeCompare(b.cell_id)), [cells]);
 
   // tower positions only depend on geography, keep them stable across power changes
@@ -269,14 +271,20 @@ const SceneContents: React.FC<TowerFieldProps> = (props) => {
                 e.stopPropagation();
                 onSelectCell(selectedCell === c.cell_id ? null : c.cell_id);
               }}
-              onPointerOver={() => (document.body.style.cursor = 'pointer')}
-              onPointerOut={() => (document.body.style.cursor = '')}
+              onPointerOver={() => {
+                document.body.style.cursor = 'pointer';
+                setHoverCell(c.cell_id);
+              }}
+              onPointerOut={() => {
+                document.body.style.cursor = '';
+                setHoverCell(null);
+              }}
             >
               <cylinderGeometry args={[0.9, 0.9, TOWER_HEIGHT + 0.6, 8]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
             <Html position={[pos.x, pos.y + TOWER_HEIGHT + 0.75, pos.z]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
-              <div className={`tower-tag ${isFocus ? 'is-focus' : ''} ${isContested ? 'is-contested' : ''}`}>
+              <div className={`tower-tag ${isFocus || hoverCell === c.cell_id ? 'is-focus' : ''} ${isContested ? 'is-contested' : ''}`}>
                 <span className="dot" style={{ background: HEALTH_COLOR[health], boxShadow: `0 0 8px ${HEALTH_COLOR[health]}` }} />
                 <span className="name">{prettyCell(c.cell_id)}</span>
                 <span className="pwr">{active ? `${c.tx_power_dbm.toFixed(1)} dBm` : 'OFF'}</span>
@@ -318,7 +326,7 @@ const SceneContents: React.FC<TowerFieldProps> = (props) => {
         autoRotate={autoRotate}
         autoRotateSpeed={0.35}
       />
-      <CameraRig target={focusVec} controls={controls} />
+      <CameraRig target={focusVec} controls={controls} nonce={props.viewNonce ?? 0} />
     </>
   );
 };

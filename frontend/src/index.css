@@ -46,19 +46,28 @@ body {
 /* ───────────────────────── RANGUARD Control Room ───────────────────────── */
 .cr-root {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #0a0f1a;
+  background:
+    radial-gradient(900px 420px at 88% -8%, rgba(255, 140, 60, 0.13), transparent 65%),
+    radial-gradient(800px 500px at -5% 0%, rgba(120, 90, 220, 0.12), transparent 60%),
+    #0f0d1c;
 }
 .cr-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 
 .cr-panel {
-  background: #0f1624;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: linear-gradient(180deg, #1c1934, #181530);
+  border: 1px solid rgba(255, 196, 150, 0.13);
   border-radius: 14px;
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.7);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
+.cr-panel:hover { border-color: rgba(255, 170, 100, 0.26); }
+.cr-lift { transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease; }
+.cr-lift:hover { transform: translateY(-2px); }
+.cr-lift:active { transform: translateY(0) scale(0.99); }
 .cr-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
-  color: #94a3b8;
+  color: #b3aac9;
 }
 
 .cr-fade-in { animation: crFadeIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
@@ -89,25 +98,48 @@ body {
   gap: 6px;
   padding: 3px 9px 3px 7px;
   border-radius: 999px;
-  background: rgba(8, 12, 22, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #e2e8f0;
-  font: 600 11px/1.2 'Inter', sans-serif;
+  background: rgba(18, 14, 34, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f3eefc;
+  font: 600 12.5px/1.2 'Inter', sans-serif;
   white-space: nowrap;
   backdrop-filter: blur(6px);
   transition: transform 0.3s, border-color 0.3s, background 0.3s;
   user-select: none;
 }
 .tower-tag .dot { width: 7px; height: 7px; border-radius: 99px; }
-.tower-tag .pwr { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: #94a3b8; font-size: 10.5px; }
-.tower-tag.is-focus { transform: scale(1.18); border-color: rgba(251, 191, 36, 0.7); background: rgba(30, 22, 8, 0.82); }
+.tower-tag .pwr { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: #cfc7e0; font-size: 11.5px; }
+.tower-tag.is-focus { transform: scale(1.18); border-color: rgba(255, 154, 61, 0.85); background: rgba(48, 26, 10, 0.88); }
 .tower-tag.is-contested { border-color: rgba(248, 113, 113, 0.85); box-shadow: 0 0 18px rgba(248, 113, 113, 0.35); }
 .ghost-tag {
   padding: 2px 8px;
   border-radius: 6px;
   border: 1px dashed;
-  background: rgba(8, 12, 22, 0.78);
-  font: 600 10.5px/1.3 'JetBrains Mono', monospace;
+  background: rgba(18, 14, 34, 0.88);
+  font: 600 12px/1.3 'JetBrains Mono', monospace;
   white-space: nowrap;
   animation: crFadeIn 0.4s both;
 }
+
+/* landing hero */
+.hero-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: heroRing 7.2s linear infinite;
+}
+@keyframes heroRing {
+  0% { transform: scale(0.06); opacity: 0; }
+  12% { opacity: 0.95; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.hero-beacon { animation: heroBeacon 1.8s ease-in-out infinite; filter: drop-shadow(0 0 8px #ff3b3b); }
+@keyframes heroBeacon { 0%, 55%, 100% { opacity: 0.25; } 70%, 85% { opacity: 1; } }
+
+/* impact graph */
+.ig-dash { animation: igDash 1.2s linear infinite; }
+@keyframes igDash { to { stroke-dashoffset: -24; } }
+.ig-pulse { animation: igPulse 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes igPulse { 0%, 100% { opacity: 0.18; transform: scale(0.92); } 50% { opacity: 0.5; transform: scale(1.12); } }
+
+.ig-node { transition: opacity 0.25s ease; }
+.ig-node:focus-visible { filter: drop-shadow(0 0 6px #ff9a3d); }

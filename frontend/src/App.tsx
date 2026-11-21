@@ -30,10 +30,11 @@ import { CinematicExperience } from './components/cinematic/CinematicExperience'
 import { ModelInspector } from './components/inspector/ModelInspector';
 import { Box, Grid } from 'lucide-react';
 import { ControlRoom } from './control/ControlRoom';
+import { Landing } from './control/Landing';
 
 export default function App() {
   // Navigation View: 'cinematic' (3D Technical Walkthrough) or 'lab' (Interactive Simulation Lab)
-  const [viewMode, setViewMode] = useState<'control' | 'cinematic' | 'lab'>('control');
+  const [viewMode, setViewMode] = useState<'landing' | 'control' | 'cinematic' | 'lab'>('landing');
 
   // Network representation in Lab view: '3d' or '2d'
   const [labNetworkView, setLabNetworkView] = useState<'3d' | '2d'>('3d');
@@ -299,8 +300,10 @@ export default function App() {
         initialModelId={inspectorModelId}
       />
 
-      {viewMode === 'control' ? (
-        <ControlRoom onOpenStory={() => setViewMode('cinematic')} onOpenMath={() => handleOpenInspector()} />
+      {viewMode === 'landing' ? (
+        <Landing onEnter={() => setViewMode('control')} />
+      ) : viewMode === 'control' ? (
+        <ControlRoom onHome={() => setViewMode('landing')} onOpenStory={() => setViewMode('cinematic')} onOpenMath={() => handleOpenInspector()} />
       ) : viewMode === 'cinematic' ? (
         <CinematicExperience
           cells={networkState.cells}
