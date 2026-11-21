@@ -21,6 +21,8 @@ class Cell(BaseModel):
     total_interference_caused: float = Field(default=0.0, description="Interference radiated to neighbors (linear mW)")
     last_action_cycle: Optional[int] = Field(default=None, description="Simulation cycle when power last changed")
     last_power_change: float = Field(default=0.0, description="Delta of the most recent power adjustment (dBm)")
+    capacity_mbps: float = Field(default=70.0, description="Nominal cell throughput capacity in Mbps")
+    total_traffic_demand: float = Field(default=0.0, description="Total aggregated user traffic demand in Mbps")
 
     @property
     def is_active(self) -> bool:

@@ -40,6 +40,18 @@ def test_controllers_commands_endpoint():
     assert len(commands) > 0
 
 
+def test_controllers_status_endpoint():
+    res = client.get("/api/controllers/status")
+    assert res.status_code == 200
+    status_list = res.json()
+    assert isinstance(status_list, list)
+    assert len(status_list) == 3
+    names = [s["controller_id"] for s in status_list]
+    assert "ENERGY" in names
+    assert "COVERAGE" in names
+    assert "INTERFERENCE" in names
+
+
 def test_referee_evaluate_and_commit_endpoints():
     client.post("/api/simulation/reset", json={"seed": 42})
 
