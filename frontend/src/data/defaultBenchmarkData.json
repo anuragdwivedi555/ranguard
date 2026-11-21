@@ -1,0 +1,39 @@
+{
+  "policies": {
+    "no_referee": {
+      "name": "No Referee (Raw Execution)",
+      "coverage_pct": 99.0,
+      "total_energy": 82.125,
+      "avg_sinr_db": 21.5,
+      "min_sinr_db": -1.85,
+      "interference": 293.9,
+      "safety_violations": 0,
+      "control_reversals": 6,
+      "median_latency_ms": 8.07
+    },
+    "fixed_priority": {
+      "name": "Fixed Priority (Coverage > Int > Energy)",
+      "coverage_pct": 99.0,
+      "total_energy": 82.125,
+      "avg_sinr_db": 21.5,
+      "min_sinr_db": -1.85,
+      "interference": 293.9,
+      "safety_violations": 0,
+      "control_reversals": 2,
+      "median_latency_ms": 5.39
+    },
+    "ranguard": {
+      "name": "RANGUARD (Autonomous Referee)",
+      "coverage_pct": 99.0,
+      "total_energy": 77.031,
+      "avg_sinr_db": 21.22,
+      "min_sinr_db": -2.08,
+      "interference": 248.57,
+      "safety_violations": 0,
+      "control_reversals": 2,
+      "median_latency_ms": 33.78
+    }
+  },
+  "cycles_evaluated": 4,
+  "seed": 42
+}
