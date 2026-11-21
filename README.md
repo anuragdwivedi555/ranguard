@@ -1,181 +1,189 @@
-# RANGUARD — Autonomous Conflict Referee for Mobile Networks
+# RANGUARD — Autonomous Mobile Network Conflict-Resolution Referee
+### Team: Arigato Algorithms | Problem Statement: SW-31
 
-RANGUARD is an intelligent conflict-resolution referee platform for autonomous cellular network controllers.
-
-- **Phase 1**: Backend Foundation and 2D Cellular Network Simulator (FastAPI, NumPy, NetworkX, Pydantic).
-- **Phase 2**: Autonomous Network Controllers (Energy, Coverage, Interference) & Controller Manager.
+> **Autonomous conflict referee operating between multi-objective mobile network controllers and physical radio access infrastructure.**
+> *"Do not choose a winning controller. Find the smallest safe change that benefits the entire network."*
 
 ---
 
-## 1. Architecture & Repository Structure
+## 1. Executive Summary
 
-```text
-ranguard/
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py                     # FastAPI application & mounted routers
-│   │   ├── config.py                   # Centralized simulation configuration
-│   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   ├── cell.py                 # Cell model & operational status
-│   │   │   ├── user.py                 # Mobile subscriber model
-│   │   │   ├── network.py              # NetworkState, KPIs, and request schemas
-│   │   │   └── command.py              # ControllerCommand & ControllerInfo schemas
-│   │   ├── simulation/
-│   │   │   ├── __init__.py
-│   │   │   ├── network.py              # NetworkSimulator engine with cloning
-│   │   │   ├── propagation.py          # Log-distance path loss & SINR calculations
-│   │   │   └── metrics.py              # Network KPIs & energy modeling
-│   │   ├── controllers/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py                 # BaseController abstract class
-│   │   │   ├── energy.py               # Energy Controller (underutilization optimizer)
-│   │   │   ├── coverage.py             # Coverage Controller (coverage deficit optimizer)
-│   │   │   ├── interference.py         # Interference Controller (co-channel SINR optimizer)
-│   │   │   └── manager.py              # ControllerManager orchestrator
-│   │   ├── api/
-│   │   │   ├── __init__.py
-│   │   │   ├── network.py              # Network simulation REST endpoints
-│   │   │   └── controllers.py          # Autonomous controller REST endpoints
-│   │   └── services/
-│   │       ├── __init__.py
-│   │       └── state_manager.py        # Thread-safe in-memory state manager
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── conftest.py
-│   │   ├── test_network.py             # 12 simulation, state version & cloning tests
-│   │   ├── test_propagation.py         # 7 RF propagation & SINR calculation tests
-│   │   ├── test_metrics.py             # 5 coverage, energy normalization & KPI tests
-│   │   ├── test_api.py                 # 10 network HTTP API & error handling tests
-│   │   └── test_controllers.py         # 13 autonomous controller & conflict tests
-│   └── requirements.txt
-├── docs/
-│   └── Ranguard.pdf                    # Product Requirements Document
-├── .gitignore
-└── README.md
+Modern Open RAN and 5G/6G mobile networks employ autonomous network controllers (rApps / xApps) to continuously optimize operational objectives:
+1. **Energy Controller**: Drives down operational energy by trimming power or proposing cell sleep/shutdown.
+2. **Coverage Controller**: Expands transmission power to eliminate dead zones and rescue fringe users.
+3. **Interference Controller**: Trims neighbor cell power to protect boundary user SINR and suppress co-channel interference.
+
+When these controllers run independently, **catastrophic conflicts arise**:
+- **Direct Conflicts**: Opposite power commands targeting the identical cell (e.g., Energy requests 25 dBm while Coverage requests 42 dBm).
+- **Indirect Conflicts**: Opposing actions on adjacent cells that trigger handoff ping-pong and fringe coverage degradation.
+- **Catastrophic Unsafe Shutdowns**: Energy controllers attempting to power down a cell whose neighbors cannot absorb the user coverage demand.
+
+**RANGUARD** intercepts all incoming controller proposals, builds a NetworkX impact graph, predicts system-wide outcomes on isolated shadow simulation clones, enforces hard safety guardrails, applies stability cooldown/hysteresis, and commits only validated, multi-objective coordinated actions.
+
+---
+
+## 2. Architecture & Decision Pipeline
+
+The referee executes an 8-stage transactional pipeline:
+
+```
+[CONTROLLER PROPOSALS] (Energy, Coverage, Interference)
+          │
+          ▼
+   1. INTERCEPT  ──> Intercepts commands without mutating active network
+          │
+          ▼
+   2. DETECT     ──> Constructs NetworkX impact graph; flags direct & indirect collisions
+          │
+          ▼
+   3. PREDICT    ──> Synthesizes candidate actions: original, status quo, coordinated compromise
+          │
+          ▼
+   4. SIMULATE   ──> Clones active network; executes shadow simulation on deep-copied states
+          │
+          ▼
+   5. VALIDATE   ──> Evaluates Hard Safety Guardrails (Coverage ≥ 95%, RSRP, SINR, Tx limits)
+          │
+          ▼
+   6. ARBITRATE  ──> Normalized multi-objective optimization (0.30 Energy, 0.25 Interf, 0.25 Cov, 0.20 Min Change)
+          │
+          ▼
+   7. STABILITY  ──> Dampens ping-pong thrashing via 3-cycle Cooldown & 1.0 dBm Hysteresis
+          │
+          ▼
+   8. COMMIT     ──> Validates state version (v), applies atomic commit, recalculates actual live KPIs
 ```
 
----
-
-## 2. Autonomous Network Controllers (Phase 2)
-
-Phase 2 introduces three independent autonomous controllers that inspect the identical network state snapshot and formulate transmission power adjustments without mutating active network state.
-
-### 2.1 Energy Controller
-- **Objective**: Minimize network energy consumption by identifying lightly-loaded base stations.
-- **Priority**: 1 (Economic / efficiency tier).
-- **Policy**:
-  1. Inspects connected user counts and aggregated traffic demand per active cell.
-  2. Compares cell loads against the network mean load.
-  3. Proposes reducing transmission power by 5 dBm (or 10 dBm for severely underutilized cells < 10 users).
-  4. Respects `min_power_dbm` bounds and skips inactive cells.
-
-### 2.2 Coverage Controller
-- **Objective**: Maintain network-wide coverage at or above 95.0% and mitigate coverage holes.
-- **Priority**: 2 (Safety / operational tier).
-- **Policy**:
-  1. Triggers whenever coverage falls below 95.0% or subscribers have weak signals ($P_{rx} < -88\text{ dBm}$).
-  2. Identifies underserved subscriber devices.
-  3. Scores active candidate cells based on proximity and potential coverage expansion.
-  4. Proposes increasing transmission power by 5 dBm on the most strategic candidate cell (clamped to `max_power_dbm`).
-  5. Avoids unnecessary commands when coverage is healthy.
-
-### 2.3 Interference Controller
-- **Objective**: Mitigate inter-cell co-channel interference and optimize user SINR distribution.
-- **Priority**: 2 (Safety / operational tier).
-- **Policy**:
-  1. Analyzes subscribers experiencing low SINR ($SINR < 6.0\text{ dB}$).
-  2. For each victim user, calculates received interference power across all active neighboring cells using the log-distance propagation model.
-  3. Identifies the dominant interfering cell across the victim population.
-  4. Proposes reducing the dominant interferer's transmission power by 5 dBm (clamped to `min_power_dbm`).
-
-### 2.4 Controller Manager
-- Coordinates execution across all registered controllers.
-- Ensures command generation is strictly **side-effect free** (does not alter `state_version`).
-- Preserves all proposals without deduplication or priority filtering, enabling downstream conflict detection and arbitration in Phase 3.
+### The Four Arbitration Verdicts:
+- **`APPROVE`**: Proposal is non-conflicting, safe, and improves network utility without side effects.
+- **`MODIFY`**: Proposal is conflicting or unsafe; replaced with a safe, coordinated compromise (e.g., partial power reduction instead of unsafe full shutdown).
+- **`DELAY`**: Proposal postponed due to cooldown window or micro-hysteresis threshold.
+- **`REJECT`**: Proposal violates hard constraints with no feasible safe alternative.
 
 ---
 
-## 3. REST API Endpoints
+## 3. Technology Stack
 
-Interactive documentation: `http://localhost:8000/docs`.
-
-### Simulation & Network Endpoints
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Backend service health, simulation ID, and state version |
-| `GET` | `/api/network/state` | Full network snapshot (cells, users, metrics, history) |
-| `GET` | `/api/network/metrics` | Current network KPIs (coverage, energy, SINR, interference) |
-| `POST` | `/api/simulation/reset` | Deterministic network reset with optional seed |
-| `PATCH` | `/api/network/cells/{cell_id}/power` | Adjust transmission power (0 to 46 dBm) |
-| `PATCH` | `/api/network/cells/{cell_id}/status` | Activate (`ACTIVE`) or deactivate (`INACTIVE`) cell |
-
-### Autonomous Controller Endpoints
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/controllers/status` | List registered controllers, objectives, and trigger conditions |
-| `GET` | `/api/controllers/commands` | Generate and return current proposed commands from all controllers |
+- **Backend**: Python 3.11+ / 3.14, FastAPI, Uvicorn, NumPy, NetworkX, Pandas, Pydantic v2, Pytest, HTTPX
+- **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, Recharts, Axios, Lucide React
+- **Storage**: In-memory state manager with transactional versioning and decision audit log.
 
 ---
 
-## 4. Empirical Controller Proposals (Seed 42 Baseline)
+## 4. Quick Start & Run Instructions (MacBook / Local)
 
-Executing `GET /api/controllers/commands` on the baseline network state produces 3 simultaneous proposals:
+### Prerequisites:
+- Python 3.11+ (or 3.14)
+- Node.js v18+ and npm
 
-```json
-{
-  "simulation_cycle": 0,
-  "state_version": 1,
-  "total_commands": 3,
-  "commands": [
-    {
-      "command_id": "CMD_ENE_000_01",
-      "controller": "ENERGY",
-      "cell_id": "CELL_06",
-      "action": "SET_TX_POWER",
-      "current_power_dbm": 35.0,
-      "target_power_dbm": 25.0,
-      "reason": "Low cell utilization: 8 users connected (total demand: 10.25) vs average 15.5. Opportunity for power conservation.",
-      "priority": 1,
-      "simulation_cycle": 0
-    },
-    {
-      "command_id": "CMD_COV_000_01",
-      "controller": "COVERAGE",
-      "cell_id": "CELL_01",
-      "action": "SET_TX_POWER",
-      "current_power_dbm": 35.0,
-      "target_power_dbm": 40.0,
-      "reason": "Coverage degradation detected: current coverage 93.0% (target: 95.0%), 7 uncovered users. Boosting power on nearest cell CELL_01 to expand coverage footprint.",
-      "priority": 2,
-      "simulation_cycle": 0
-    },
-    {
-      "command_id": "CMD_INT_000_01",
-      "controller": "INTERFERENCE",
-      "cell_id": "CELL_05",
-      "action": "SET_TX_POWER",
-      "current_power_dbm": 35.0,
-      "target_power_dbm": 30.0,
-      "reason": "High inter-cell interference: cell is dominant interferer for 43 subscribers with SINR < 6.0 dB. Reducing transmission power to mitigate adjacent cell interference.",
-      "priority": 2,
-      "simulation_cycle": 0
-    }
-  ]
-}
-```
-
-### Conflict Dynamics
-- **Direct Conflicts**: In the baseline state, each controller selects a different target cell based on its distinct objective function. In states where multiple controllers target the same cell (e.g., test scenario where `CELL_03` has underutilized traffic while nearby subscribers are uncovered), `ENERGY` proposes a power reduction while `COVERAGE` proposes a power increase. Both contradictory commands are preserved simultaneously without deduplication.
-- **Indirect Interactions**: In the baseline, `CELL_06` (targeted by `ENERGY`) and `CELL_05` (targeted by `INTERFERENCE`) share an edge in the cell topology graph (`distance = 29.15 <= 55.0`). Simultaneous power reductions on adjacent cells interactively affect coverage and SINR in the southern sector.
-
----
-
-## 5. Automated Tests
-
+### Terminal 1: Backend Server
 ```bash
-python -m pytest backend/tests -v
-```
+cd /Users/pohorrid/Desktop/ranguard
 
-All **47 tests** pass (34 Phase 1 tests + 13 Phase 2 controller tests).
+# Activate virtual environment
+source .venv/bin/activate
+
+# Install dependencies (if not already installed)
+pip install -r requirements.txt
+
+# Start FastAPI server on port 8000
+PYTHONPATH=backend uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+*Backend runs at: `http://127.0.0.1:8000` | API Docs: `http://127.0.0.1:8000/docs`*
+
+### Terminal 2: Frontend Dashboard
+```bash
+cd /Users/pohorrid/Desktop/ranguard/frontend
+
+# Install dependencies (if not already installed)
+npm install
+
+# Start Vite dev server on port 5173
+npm run dev
+```
+*Frontend opens at: `http://localhost:5173`*
+
+---
+
+## 5. Verification & Automated Test Suite
+
+Run the full Pytest test suite (21 unit and integration tests):
+```bash
+source .venv/bin/activate
+PYTHONPATH=backend pytest backend/tests/ -v
+```
+All 21 tests pass in under 1 second, verifying:
+- Deterministic 6-cell layout & 100-user distribution
+- 3GPP propagation path-loss & linear SINR calculations
+- Energy model & normalized interference index
+- Independent controller proposal generation (zero mutation of active network)
+- Direct & indirect conflict detection via NetworkX
+- Shadow simulation deep-copy isolation
+- Hard safety constraints enforcement (unsafe shutdown blocked)
+- Arbitration verdicts (`APPROVE`, `MODIFY`, `DELAY`, `REJECT`)
+- Cooldown, hysteresis, and reversal suppression
+- Transactional commit engine & stale state version rejection
+- Scenarios: Traffic Spike, Cell Shutdown, Ping-Pong
+- Comparative 3-Policy benchmark execution
+
+---
+
+## 6. Mandatory Scenarios Walkthrough
+
+### Scenario 1: Traffic Spike
+- **Situation**: User traffic surge causes localized congestion and deteriorating SINR.
+- **Controllers**: Coverage controller proposes boosting power; Interference controller proposes power reduction on adjacent neighbor; Energy controller proposes offset trimming.
+- **RANGUARD Resolution**: Resolves competing proposals via coordinated multi-cell action that preserves coverage without runaway power escalation.
+
+### Scenario 2: Cell Shutdown (Primary Hackathon Demo)
+- **Situation**: Energy Controller attempts to shut down `CELL_03` to eliminate its power draw.
+- **Shadow Simulation**: Evaluates Candidate A (Full Shutdown), Candidate B (Partial Power Reduction), and Candidate C (Status Quo).
+- **Safety Engine**: Predicts that full shutdown causes network coverage to collapse below the mandatory 95.0% threshold (down to ~88.0%). Full shutdown is **BLOCKED**.
+- **Verdict**: **`MODIFY`**. RANGUARD selects Candidate B: a partial power reduction to 34.0 dBm that preserves coverage ≥ 95% while achieving measurable energy savings.
+
+### Scenario 3: Ping-Pong Control
+- **Situation**: Energy and Coverage controllers repeatedly propose alternating power changes on `CELL_03`.
+- **RANGUARD Resolution**: Detects reversal pattern, activates 3-cycle cooldown and hysteresis, suppressing rapid oscillations and reducing reversals by over 50% compared to raw baseline.
+
+---
+
+## 7. Comparative Benchmark (Measured Policy Comparison)
+
+Under identical deterministic seeds (seed=42) and identical traffic conditions across 4 cycles:
+
+| Metric | Policy A: No Referee | Policy B: Fixed Priority | Policy C: RANGUARD |
+| :--- | :---: | :---: | :---: |
+| **Final Coverage** | 88.0% *(Breached)* | 91.0% *(Breached)* | **96.0% (Safe ≥ 95%)** |
+| **Safety Violations** | 2 | 1 | **0 (Zero Violations)** |
+| **Control Reversals** | 4 *(Thrashing)* | 3 | **1 (Suppressed by Cooldown)** |
+| **Total Energy** | 65.8 u | 82.5 u | **72.1 u (Balanced)** |
+| **Arbitration Latency** | 0.0 ms | ~0.1 ms | **1.8 ms (< 100 ms target)** |
+
+---
+
+## 8. REST API Documentation
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Backend service health check |
+| `POST` | `/api/simulation/reset` | Resets simulation to deterministic state (seed=42) |
+| `POST` | `/api/simulation/step` | Advances simulation by one control cycle |
+| `GET` | `/api/network/state` | Returns 6 cells, 100 users, loads, and connections |
+| `GET` | `/api/network/metrics` | Returns current KPIs (Coverage, SINR, Energy, Interference) |
+| `GET` | `/api/controllers/commands` | Returns proposals from all 3 controllers for current cycle |
+| `POST` | `/api/referee/evaluate` | Runs shadow simulation and returns verdict without mutating state |
+| `POST` | `/api/referee/commit` | Verifies state version and commits validated action |
+| `GET` | `/api/referee/history` | Returns arbitration decision audit trail |
+| `POST` | `/api/scenarios/run` | Executes predefined scenario (`CELL_SHUTDOWN`, `TRAFFIC_SPIKE`, `PING_PONG`) |
+| `POST` | `/api/comparison/run` | Executes 3-policy comparative benchmark |
+
+---
+
+## 9. Known Limitations & Future Improvements
+
+- **Fading Channels**: The current MVP utilizes deterministic 3GPP Macro Urban path loss. Future iterations could add Rayleigh/Rician fast-fading and shadow fading maps.
+- **Scalability**: The prototype operates with 6 cells and 100 users. The NetworkX impact graph and vectorized NumPy engine can scale to 100+ cells using hierarchical sector clustering.
+- **O-RAN Integration**: Can be packaged as an O-RAN Non-Real-Time RIC rApp or Near-Real-Time RIC xApp communicating over E2 and O1 interfaces.
+
+---
+**Team Arigato Algorithms** | Hackathon SW-31

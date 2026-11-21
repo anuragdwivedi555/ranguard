@@ -1,0 +1,13 @@
+{
+  "name": "ranguard",
+  "version": "1.0.0",
+  "description": "RANGUARD: Autonomous Mobile Network Conflict-Resolution Referee",
+  "scripts": {
+    "backend": "source .venv/bin/activate && PYTHONPATH=backend uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "frontend": "npm --prefix frontend run dev",
+    "test": "source .venv/bin/activate && PYTHONPATH=backend pytest backend/tests/ -v",
+    "build": "npm --prefix frontend run build"
+  },
+  "author": "Arigato Algorithms",
+  "license": "MIT"
+}

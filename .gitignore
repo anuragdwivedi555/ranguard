@@ -24,7 +24,6 @@ wheels/
 # Virtual environments
 .env
 .venv
-env/
 venv/
 ENV/
 
@@ -35,6 +34,10 @@ htmlcov/
 .tox/
 .nox/
 
+# Frontend Node
+node_modules/
+frontend/dist/
+
 # IDE & OS
 .idea/
 .vscode/
@@ -42,4 +45,3 @@ htmlcov/
 *.swo
 .DS_Store
 Thumbs.db
-
