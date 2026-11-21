@@ -1,4 +1,5 @@
-from typing import Any, Dict, List
+import time
+from typing import Any, Dict, List, Tuple
 from ..simulation.network_engine import NetworkEngine
 from ..models.decision import CandidateAction
 from .guardrails import SafetyGuardrails
@@ -22,6 +23,7 @@ class ShadowSimulator:
         action_cache: Dict[tuple, Tuple[Any, bool, List[str]]] = {}
 
         for c_def in candidate_definitions:
+            sim_start = time.perf_counter()
             joint_actions = c_def.get("joint_actions", {})
             action_sig = tuple(sorted(
                 (cid, act.get("status", "ACTIVE"), round(float(act.get("tx_power_dbm", 0.0)), 2))
@@ -69,6 +71,8 @@ class ShadowSimulator:
                 is_safe=is_safe,
                 violated_constraints=violated_constraints,
                 explanation=explanation,
+                origin=c_def.get("origin", ""),
+                sim_ms=round((time.perf_counter() - sim_start) * 1000.0, 3),
             )
             evaluated_candidates.append(candidate_action)
 

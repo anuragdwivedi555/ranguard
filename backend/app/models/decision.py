@@ -24,6 +24,8 @@ class CandidateAction(BaseModel):
     coverage_score: float = 0.0
     change_score: float = 0.0
     explanation: str = ""
+    origin: str = ""
+    sim_ms: float = 0.0
 
 
 class ConflictReport(BaseModel):

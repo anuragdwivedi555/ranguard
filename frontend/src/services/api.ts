@@ -75,6 +75,22 @@ export const api = {
     return res.data;
   },
 
+  // Operator-in-the-loop review
+  prepareScenario: async (scenario: 'CELL_SHUTDOWN' | 'TRAFFIC_SPIKE'): Promise<any> => {
+    const res = await client.post('/scenarios/prepare', { scenario });
+    return res.data;
+  },
+
+  shadowReview: async (commands: ControllerCommand[]): Promise<any> => {
+    const res = await client.post('/referee/shadow', { commands });
+    return res.data;
+  },
+
+  commitCandidate: async (commands: ControllerCommand[], candidate_id: string): Promise<any> => {
+    const res = await client.post('/referee/commit-candidate', { commands, candidate_id });
+    return res.data;
+  },
+
   // Benchmark comparison
   runBenchmarkComparison: async (seed: number = 42, cycles: number = 4): Promise<BenchmarkComparison> => {
     const res = await client.post('/comparison/run', { seed, cycles });
