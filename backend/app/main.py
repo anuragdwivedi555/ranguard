@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api.routes import simulation, network, controllers, referee, scenarios, comparison
+from .api.routes import simulation, network, controllers, referee, scenarios, comparison, ml
 
 app = FastAPI(
     title="RANGUARD — Autonomous Mobile Network Conflict-Resolution Referee",
@@ -24,6 +24,7 @@ app.include_router(controllers.router)
 app.include_router(referee.router)
 app.include_router(scenarios.router)
 app.include_router(comparison.router)
+app.include_router(ml.router)
 
 
 @app.get("/api/health", summary="Health check endpoint")

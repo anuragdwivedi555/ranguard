@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from ..models.cell import Cell
 from ..models.user import User
 from .signal_model import SignalModel
@@ -15,6 +15,7 @@ class InterferenceModel:
         cls,
         user: User,
         cells: Dict[str, Cell],
+        path_loss_cache: Optional[Dict[Tuple[str, str], float]] = None,
     ) -> Tuple[float, float, float]:
         """
         Calculates (RSRP_dBm, SINR_dB, total_interference_mw) for a user given active cells.
@@ -30,8 +31,12 @@ class InterferenceModel:
         if not serving_cell.is_active:
             return -140.0, -30.0, 0.0
 
-        dist_serving = SignalModel.calculate_distance(user.x, user.y, serving_cell.x, serving_cell.y)
-        serving_rsrp = SignalModel.calculate_rsrp(serving_cell.tx_power_dbm, dist_serving)
+        if path_loss_cache is not None and (user.user_id, user.serving_cell) in path_loss_cache:
+            serving_pl = path_loss_cache[(user.user_id, user.serving_cell)]
+            serving_rsrp = serving_cell.tx_power_dbm - serving_pl
+        else:
+            dist_serving = SignalModel.calculate_distance(user.x, user.y, serving_cell.x, serving_cell.y)
+            serving_rsrp = SignalModel.calculate_rsrp(serving_cell.tx_power_dbm, dist_serving)
         serving_power_mw = SignalModel.dbm_to_mw(serving_rsrp)
 
         # Sum linear interference from all other active cells
@@ -39,8 +44,12 @@ class InterferenceModel:
         for cell_id, cell in cells.items():
             if cell_id == user.serving_cell or not cell.is_active:
                 continue
-            dist_int = SignalModel.calculate_distance(user.x, user.y, cell.x, cell.y)
-            rsrp_int = SignalModel.calculate_rsrp(cell.tx_power_dbm, dist_int)
+            if path_loss_cache is not None and (user.user_id, cell_id) in path_loss_cache:
+                pl_int = path_loss_cache[(user.user_id, cell_id)]
+                rsrp_int = cell.tx_power_dbm - pl_int
+            else:
+                dist_int = SignalModel.calculate_distance(user.x, user.y, cell.x, cell.y)
+                rsrp_int = SignalModel.calculate_rsrp(cell.tx_power_dbm, dist_int)
             interference_mw += SignalModel.dbm_to_mw(rsrp_int)
 
         noise_mw = SignalModel.dbm_to_mw(SignalModel.NOISE_FLOOR_DBM)

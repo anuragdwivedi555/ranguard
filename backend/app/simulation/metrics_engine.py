@@ -20,6 +20,8 @@ class MetricsEngine:
         cells: Dict[str, Cell],
         users: List[User],
         min_coverage_target: float = 95.0,
+        cumulative_energy_joules: float = 0.0,
+        cumulative_energy_wh: float = 0.0,
     ) -> NetworkMetrics:
         total_users = len(users)
         if total_users == 0:
@@ -83,6 +85,8 @@ class MetricsEngine:
             min_sinr_db=min_sinr,
             avg_rsrp_dbm=avg_rsrp,
             total_energy=total_energy,
+            cumulative_energy_joules=cumulative_energy_joules,
+            cumulative_energy_wh=cumulative_energy_wh,
             interference_level=total_interference,
             active_cells=active_cells_count,
             total_cells=len(cells),

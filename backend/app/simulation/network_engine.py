@@ -45,6 +45,9 @@ class NetworkEngine:
             self.traffic_provider = MilanReplayTrafficProvider()
         else:
             self.traffic_provider = SyntheticTrafficProvider()
+        self.cycle_duration_seconds: float = 10.0
+        self.cumulative_energy_joules: float = 0.0
+        self.cumulative_energy_wh: float = 0.0
         self.initialize_network()
 
     def initialize_network(self) -> None:
@@ -54,6 +57,8 @@ class NetworkEngine:
         self.rng = np.random.RandomState(self.seed)
         self.cycle = 1
         self.state_version = 1
+        self.cumulative_energy_joules = 0.0
+        self.cumulative_energy_wh = 0.0
 
         # 1. Initialize 6 cells in a 2-tier grid across 2200m x 2000m
         cell_configs = [
@@ -123,6 +128,13 @@ class NetworkEngine:
             )
             user_idx += 1
 
+        # Precompute static geometric path loss matrix between all users and cells
+        self._path_loss_cache: Dict[Tuple[str, str], float] = {}
+        for u in self.users:
+            for cid, cell in self.cells.items():
+                d = SignalModel.calculate_distance(u.x, u.y, cell.x, cell.y)
+                self._path_loss_cache[(u.user_id, cid)] = SignalModel.calculate_path_loss(d)
+
         # 3. Apply traffic provider demands if provider attached
         if hasattr(self, "traffic_provider") and self.traffic_provider is not None:
             self.traffic_provider.update_cycle(self.users, self.cells, self.cycle)
@@ -146,10 +158,15 @@ class NetworkEngine:
         for user in self.users:
             best_cell_id: Optional[str] = None
             best_rsrp = -140.0
+            u_id = user.user_id
 
             for cid, cell in active_cells.items():
-                dist = SignalModel.calculate_distance(user.x, user.y, cell.x, cell.y)
-                rsrp = SignalModel.calculate_rsrp(cell.tx_power_dbm, dist)
+                if hasattr(self, "_path_loss_cache") and (u_id, cid) in self._path_loss_cache:
+                    rsrp = cell.tx_power_dbm - self._path_loss_cache[(u_id, cid)]
+                else:
+                    dist = SignalModel.calculate_distance(user.x, user.y, cell.x, cell.y)
+                    rsrp = SignalModel.calculate_rsrp(cell.tx_power_dbm, dist)
+
                 if rsrp > best_rsrp:
                     best_rsrp = rsrp
                     best_cell_id = cid
@@ -168,9 +185,10 @@ class NetworkEngine:
                 user.is_adequately_served = False
 
         # Step C: SINR recalculation in linear units
+        pl_cache = getattr(self, "_path_loss_cache", None)
         for user in self.users:
             if user.connection_status == "CONNECTED" and user.serving_cell:
-                rsrp, sinr, _ = InterferenceModel.calculate_user_sinr(user, self.cells)
+                rsrp, sinr, _ = InterferenceModel.calculate_user_sinr(user, self.cells, path_loss_cache=pl_cache)
                 user.rsrp_dbm = round(rsrp, 2)
                 user.sinr_db = round(sinr, 2)
                 # Adequately served requirement: RSRP >= -95 dBm and SINR >= 0 dB
@@ -194,15 +212,24 @@ class NetworkEngine:
             cell.total_interference_caused = round(cell_interference.get(cid, 0.0), 3)
 
         # Calculate network metrics
-        self.metrics = MetricsEngine.calculate_metrics(self.cells, self.users)
+        self.metrics = MetricsEngine.calculate_metrics(
+            self.cells,
+            self.users,
+            cumulative_energy_joules=self.cumulative_energy_joules,
+            cumulative_energy_wh=self.cumulative_energy_wh,
+        )
         return self.metrics
 
     def clone(self) -> "NetworkEngine":
         """
-        Creates an independent deep-copy snapshot of the simulation state for shadow simulation.
+        Creates an independent snapshot of the simulation state for shadow simulation.
         Does not mutate the active network.
+        Optimized by shallow copying immutable static lookups and fast-copying cell and user states.
         """
-        snapshot = copy.deepcopy(self)
+        snapshot = copy.copy(self)
+        snapshot.cells = {cid: copy.copy(c) for cid, c in self.cells.items()}
+        snapshot.users = [copy.copy(u) for u in self.users]
+        snapshot.metrics = copy.copy(self.metrics) if self.metrics else None
         return snapshot
 
     def apply_action(self, cell_id: str, tx_power_dbm: Optional[float] = None, status: Optional[str] = None) -> None:
@@ -243,12 +270,19 @@ class NetworkEngine:
     def step(self) -> int:
         """
         Advances the simulation by one cycle.
+        Accumulates energy consumed during the cycle (Power in Watts * cycle duration in seconds).
         Updates user traffic demand if a traffic provider is active.
         """
+        if self.metrics:
+            p_watts = self.metrics.total_energy
+            delta_joules = p_watts * self.cycle_duration_seconds
+            self.cumulative_energy_joules = round(self.cumulative_energy_joules + delta_joules, 3)
+            self.cumulative_energy_wh = round(self.cumulative_energy_joules / 3600.0, 5)
+
         self.cycle += 1
         if hasattr(self, "traffic_provider") and self.traffic_provider is not None:
             self.traffic_provider.update_cycle(self.users, self.cells, self.cycle)
-            self.recalculate()
+        self.recalculate()
         return self.cycle
 
     def set_traffic_provider(self, provider: TrafficProvider) -> None:

@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 from ..simulation.state_manager import StateManager
 from ..models.decision import RefereeDecision
 from ..models.metrics import NetworkMetrics
@@ -12,10 +12,15 @@ class CommitManager:
     Manages transactional execution of validated decisions.
     Prevents stale state mutation and enforces rollback on validation failure.
     """
-    def __init__(self, guardrails: SafetyGuardrails, stability_manager: StabilityManager):
+    def __init__(
+        self,
+        guardrails: SafetyGuardrails,
+        stability_manager: StabilityManager,
+        history_service: Optional[HistoryService] = None,
+    ):
         self.guardrails = guardrails
         self.stability_manager = stability_manager
-        self.history_service = HistoryService.get_instance()
+        self.history_service = history_service or HistoryService.get_instance()
 
     def commit_decision(
         self,
@@ -53,19 +58,28 @@ class CommitManager:
         live_net = state_mgr.network
         base_metrics = live_net.metrics
 
-        # Perform dry run on cloned state to guarantee no partial mutation on runtime error
-        test_clone = live_net.clone()
-        try:
-            test_clone.apply_joint_actions(decision.selected_action)
-            is_safe, violations = self.guardrails.validate_candidate(
-                predicted_metrics=test_clone.metrics,
-                current_cells=live_net.cells,
-                proposed_actions=decision.selected_action,
-            )
-            if not is_safe:
-                return False, f"Pre-commit safety check failed: {'; '.join(violations)}", base_metrics
-        except Exception as e:
-            return False, f"Pre-commit dry run encountered exception: {str(e)}", base_metrics
+        # Latency optimization: If candidate was already verified safe by shadow simulator
+        # in this state version with identical actions, avoid redundant dry-run network clone.
+        can_bypass_dry_run = (
+            decision.selected_candidate is not None
+            and decision.selected_candidate.is_safe
+            and decision.selected_candidate.joint_actions == decision.selected_action
+        )
+
+        if not can_bypass_dry_run:
+            # Perform dry run on cloned state to guarantee no partial mutation on runtime error
+            test_clone = live_net.clone()
+            try:
+                test_clone.apply_joint_actions(decision.selected_action)
+                is_safe, violations = self.guardrails.validate_candidate(
+                    predicted_metrics=test_clone.metrics,
+                    current_cells=live_net.cells,
+                    proposed_actions=decision.selected_action,
+                )
+                if not is_safe:
+                    return False, f"Pre-commit safety check failed: {'; '.join(violations)}", base_metrics
+            except Exception as e:
+                return False, f"Pre-commit dry run encountered exception: {str(e)}", base_metrics
 
         # 3. Apply atomic updates to active network
         live_net.apply_joint_actions(decision.selected_action)
