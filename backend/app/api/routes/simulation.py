@@ -16,6 +16,12 @@ def reset_simulation(req: Optional[ResetRequest] = None):
     seed = req.seed if req else 42
     mgr = StateManager.get_instance()
     mgr.reset(seed=seed)
+    # A reset must also clear the referees' cooldown/hysteresis memory, otherwise the
+    # next run inherits stale cell history from before the reset and gets DELAYed.
+    from . import referee as referee_routes, scenarios as scenario_routes
+
+    referee_routes.arbitrator.stability_manager.reset()
+    scenario_routes.arbitrator.stability_manager.reset()
     return mgr.network.metrics
 
 

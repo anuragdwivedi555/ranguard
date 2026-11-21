@@ -13,13 +13,11 @@ class TrafficSpikeScenario:
     Coverage proposes power boost; Interference proposes power reduction on neighbor; Energy proposes saving.
     RANGUARD coordinates competing proposals into an optimal balanced action.
     """
+    DESCRIPTION = "Sudden traffic surge triggers simultaneous conflicting demands across Coverage, Interference, and Energy controllers."
+
     @classmethod
-    def run(
-        cls,
-        state_mgr: StateManager,
-        arbitrator: ArbitrationEngine,
-        commit_mgr: CommitManager,
-    ) -> Dict[str, Any]:
+    def prepare(cls, state_mgr: StateManager):
+        """Resets to the deterministic seed, applies the surge and returns the commands WITHOUT arbitrating."""
         state_mgr.reset(seed=42)
         live_net = state_mgr.network
 
@@ -72,13 +70,25 @@ class TrafficSpikeScenario:
             ),
         ]
 
+        return commands, initial_metrics
+
+    @classmethod
+    def run(
+        cls,
+        state_mgr: StateManager,
+        arbitrator: ArbitrationEngine,
+        commit_mgr: CommitManager,
+    ) -> Dict[str, Any]:
+        commands, initial_metrics = cls.prepare(state_mgr)
+        live_net = state_mgr.network
+
         # Arbitrate and commit
         decision = arbitrator.arbitrate(live_net, commands)
         success, commit_msg, post_metrics = commit_mgr.commit_decision(decision, state_mgr)
 
         return {
             "scenario": "TRAFFIC_SPIKE",
-            "description": "Sudden traffic surge triggers simultaneous conflicting demands across Coverage, Interference, and Energy controllers.",
+            "description": cls.DESCRIPTION,
             "initial_metrics": initial_metrics,
             "incoming_commands": [c.model_dump() for c in commands],
             "decision": decision.model_dump(),

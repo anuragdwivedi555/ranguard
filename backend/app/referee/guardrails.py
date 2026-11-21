@@ -86,3 +86,65 @@ class SafetyGuardrails:
 
         is_safe = len(violations) == 0
         return is_safe, violations
+
+    def evaluate_checks(
+        self,
+        predicted_metrics: NetworkMetrics,
+        current_cells: Dict[str, Cell],
+        proposed_actions: Dict[str, Dict[str, any]],
+    ) -> List[Dict[str, any]]:
+        """
+        Structured, display-ready version of validate_candidate(): one entry per hard
+        guardrail with the measured value, the limit and the pass/fail outcome.
+        """
+        powers = []
+        steps = []
+        hw_ok = True
+        for cid, act in proposed_actions.items():
+            cell = current_cells.get(cid)
+            if cell is None or "tx_power_dbm" not in act:
+                continue
+            pw = act["tx_power_dbm"]
+            powers.append(pw)
+            steps.append(abs(pw - cell.tx_power_dbm))
+            if pw < cell.min_tx_power or pw > cell.max_tx_power:
+                hw_ok = False
+        max_step = max(steps) if steps else 0.0
+        lowest = min(powers) if powers else None
+        return [
+            {
+                "key": "coverage",
+                "label": "Coverage",
+                "rule": f"≥ {self.min_coverage_pct:.0f} %",
+                "value": f"{predicted_metrics.coverage_percentage:.1f} %",
+                "passed": predicted_metrics.coverage_percentage >= self.min_coverage_pct,
+            },
+            {
+                "key": "sinr",
+                "label": "Worst-user SINR",
+                "rule": "≥ −5 dB",
+                "value": f"{predicted_metrics.min_sinr_db:.1f} dB",
+                "passed": predicted_metrics.min_sinr_db >= -5.0,
+            },
+            {
+                "key": "step",
+                "label": "Power step per cycle",
+                "rule": f"≤ {self.max_power_step:.0f} dB",
+                "value": f"{max_step:.1f} dB",
+                "passed": max_step <= self.max_power_step,
+            },
+            {
+                "key": "hardware",
+                "label": "Amplifier limits",
+                "rule": "10 – 46 dBm",
+                "value": "unchanged" if lowest is None else f"{lowest:.1f} dBm",
+                "passed": hw_ok,
+            },
+            {
+                "key": "energy",
+                "label": "Physical sanity",
+                "rule": "energy ≥ 0",
+                "value": f"{predicted_metrics.total_energy:.1f} u",
+                "passed": predicted_metrics.total_energy >= 0.0,
+            },
+        ]

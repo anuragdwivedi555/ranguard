@@ -15,14 +15,11 @@ class CellShutdownScenario:
     Full shutdown causes coverage to drop below 95% and is BLOCKED by safety guardrails.
     Partial reduction preserves coverage >= 95% while reducing energy -> VERDICT: MODIFY.
     """
+    DESCRIPTION = "Energy Controller attempts to shut down CELL_03 to minimize power consumption."
+
     @classmethod
-    def run(
-        cls,
-        state_mgr: StateManager,
-        arbitrator: ArbitrationEngine,
-        commit_mgr: CommitManager,
-    ) -> Dict[str, Any]:
-        # Reset to deterministic initial state
+    def prepare(cls, state_mgr: StateManager):
+        """Resets to the deterministic seed and returns the incoming command WITHOUT arbitrating."""
         state_mgr.reset(seed=42)
         live_net = state_mgr.network
         initial_metrics = live_net.metrics.model_dump()
@@ -42,6 +39,18 @@ class CellShutdownScenario:
             cycle=live_net.cycle,
         )
 
+        return incoming_cmd, initial_metrics
+
+    @classmethod
+    def run(
+        cls,
+        state_mgr: StateManager,
+        arbitrator: ArbitrationEngine,
+        commit_mgr: CommitManager,
+    ) -> Dict[str, Any]:
+        incoming_cmd, initial_metrics = cls.prepare(state_mgr)
+        live_net = state_mgr.network
+
         # 1. Evaluate with RANGUARD referee (shadow simulation + guardrails + arbitration)
         decision = arbitrator.arbitrate(live_net, [incoming_cmd])
 
@@ -50,7 +59,7 @@ class CellShutdownScenario:
 
         return {
             "scenario": "CELL_SHUTDOWN",
-            "description": "Energy Controller attempts to shut down CELL_03 to minimize power consumption.",
+            "description": cls.DESCRIPTION,
             "initial_metrics": initial_metrics,
             "incoming_command": incoming_cmd.model_dump(),
             "decision": decision.model_dump(),

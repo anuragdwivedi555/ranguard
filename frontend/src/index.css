@@ -42,3 +42,72 @@ body {
 .bg-radial-gradient {
   background: radial-gradient(circle at center, rgba(6, 182, 212, 0.05) 0%, transparent 70%);
 }
+
+/* ───────────────────────── RANGUARD Control Room ───────────────────────── */
+.cr-root {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0a0f1a;
+}
+.cr-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+.cr-panel {
+  background: #0f1624;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+}
+.cr-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.cr-fade-in { animation: crFadeIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cr-pop { animation: crPop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes crFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes crPop { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes crSpin { to { transform: rotate(360deg); } }
+@keyframes crPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes crShimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+.cr-spin { animation: crSpin 0.9s linear infinite; }
+.cr-pulse { animation: crPulse 1.4s ease-in-out infinite; }
+.cr-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.18), transparent);
+  background-size: 200% 100%;
+  animation: crShimmer 1.4s linear infinite;
+}
+.cr-bar { transition: width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.4s; }
+
+.cr-scenario {
+  transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+}
+.cr-scenario:hover { transform: translateY(-2px); }
+
+/* 3D tower labels */
+.tower-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: rgba(8, 12, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e2e8f0;
+  font: 600 11px/1.2 'Inter', sans-serif;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  transition: transform 0.3s, border-color 0.3s, background 0.3s;
+  user-select: none;
+}
+.tower-tag .dot { width: 7px; height: 7px; border-radius: 99px; }
+.tower-tag .pwr { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: #94a3b8; font-size: 10.5px; }
+.tower-tag.is-focus { transform: scale(1.18); border-color: rgba(251, 191, 36, 0.7); background: rgba(30, 22, 8, 0.82); }
+.tower-tag.is-contested { border-color: rgba(248, 113, 113, 0.85); box-shadow: 0 0 18px rgba(248, 113, 113, 0.35); }
+.ghost-tag {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px dashed;
+  background: rgba(8, 12, 22, 0.78);
+  font: 600 10.5px/1.3 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  animation: crFadeIn 0.4s both;
+}
