@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, Clapperboard, MousePointerClick, Moon, Sun, X, RotateCw, Crosshair, ShieldAlert } from 'lucide-react';
+import { BookOpen, CheckCircle2, Clapperboard, MousePointerClick, Moon, Sun, X, RotateCw, Crosshair } from 'lucide-react';
 import { BenchmarkComparison, Cell, NetworkMetrics, NetworkState } from '../types';
 import { DEFAULT_NETWORK_STATE } from '../data/defaultData';
 import { api } from '../services/api';
@@ -28,6 +28,7 @@ import {
 import { Ghost, TowerField } from './scene/TowerField';
 import { Logo } from './Logo';
 import { ImpactGraph } from './impact';
+import { RiskLensCard } from './RiskLensCard';
 import {
   CellInspector,
   InsightsPanel,
@@ -441,15 +442,6 @@ export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, 
               <span className={`w-1.5 h-1.5 rounded-full ${backend === 'live' ? 'bg-emerald-400' : 'bg-slate-400'}`} />
               {backend === 'live' ? 'Live engine' : backend === 'offline' ? 'Offline replay' : 'Connecting…'}
             </span>
-            {onOpenRiskLens && (
-              <button
-                onClick={onOpenRiskLens}
-                className="flex items-center gap-1.5 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 transition"
-                title="Open AI Risk Lens: 3-panel surrogate vs digital twin inspection"
-              >
-                <ShieldAlert className="w-3.5 h-3.5" /> <span className="hidden md:inline">AI Risk Lens</span>
-              </button>
-            )}
             <button onClick={onOpenMath} className="flex items-center gap-1.5 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300">
               <BookOpen className="w-3.5 h-3.5" /> <span className="hidden md:inline">Math</span>
             </button>
@@ -584,6 +576,7 @@ export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, 
                 )}
               </>
             )}
+            {onOpenRiskLens && <RiskLensCard onOpen={onOpenRiskLens} refreshKey={review ?? outcome} />}
           </div>
         </div>
 
