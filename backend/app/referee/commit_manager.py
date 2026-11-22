@@ -55,19 +55,12 @@ class CommitManager:
             return True, f"Decision ({decision.verdict}) acknowledged. Network state preserved without modification.", state_mgr.network.metrics
 
         # 2. Transactional safety check prior to mutating live network
-        live_net = state_mgr.network
-        base_metrics = live_net.metrics
+        with state_mgr.lock:
+            live_net = state_mgr.network
+            base_metrics = live_net.metrics
 
-        # Latency optimization: If candidate was already verified safe by shadow simulator
-        # in this state version with identical actions, avoid redundant dry-run network clone.
-        can_bypass_dry_run = (
-            decision.selected_candidate is not None
-            and decision.selected_candidate.is_safe
-            and decision.selected_candidate.joint_actions == decision.selected_action
-        )
-
-        if not can_bypass_dry_run:
-            # Perform dry run on cloned state to guarantee no partial mutation on runtime error
+            # Always perform dry run on cloned state to guarantee no partial mutation on runtime error
+            # and prevent forged is_safe payloads from bypassing deterministic guardrails.
             test_clone = live_net.clone()
             try:
                 test_clone.apply_joint_actions(decision.selected_action)
@@ -81,34 +74,34 @@ class CommitManager:
             except Exception as e:
                 return False, f"Pre-commit dry run encountered exception: {str(e)}", base_metrics
 
-        # 3. Apply atomic updates to active network
-        live_net.apply_joint_actions(decision.selected_action)
-        new_metrics = live_net.metrics
+            # 3. Apply atomic updates to active network
+            live_net.apply_joint_actions(decision.selected_action)
+            new_metrics = live_net.metrics
 
-        # Record stability history for affected cells
-        for cid, act in decision.selected_action.items():
-            if "tx_power_dbm" in act:
-                delta = live_net.cells[cid].last_power_change
-                self.stability_manager.record_commit(
-                    cell_id=cid,
-                    delta=delta,
-                    action_type=act.get("status", "POWER_ADJUST"),
-                    controller_id="RANGUARD_REFEREE",
-                    cycle=live_net.cycle,
-                )
+            # Record stability history for affected cells
+            for cid, act in decision.selected_action.items():
+                if "tx_power_dbm" in act and cid in live_net.cells:
+                    delta = live_net.cells[cid].last_power_change
+                    self.stability_manager.record_commit(
+                        cell_id=cid,
+                        delta=delta,
+                        action_type=act.get("status", "POWER_ADJUST"),
+                        controller_id="RANGUARD_REFEREE",
+                        cycle=live_net.cycle,
+                    )
 
-        # 4. Measure actual post-commit KPI impact
-        decision.committed = True
-        decision.actual_kpi_impact = {
-            "coverage_delta": round(new_metrics.coverage_percentage - base_metrics.coverage_percentage, 2),
-            "energy_delta": round(new_metrics.total_energy - base_metrics.total_energy, 2),
-            "sinr_delta": round(new_metrics.avg_sinr_db - base_metrics.avg_sinr_db, 2),
-            "interference_delta": round(new_metrics.interference_level - base_metrics.interference_level, 3),
-        }
+            # 4. Measure actual post-commit KPI impact
+            decision.committed = True
+            decision.actual_kpi_impact = {
+                "coverage_delta": round(new_metrics.coverage_percentage - base_metrics.coverage_percentage, 2),
+                "energy_delta": round(new_metrics.total_energy - base_metrics.total_energy, 2),
+                "sinr_delta": round(new_metrics.avg_sinr_db - base_metrics.avg_sinr_db, 2),
+                "interference_delta": round(new_metrics.interference_level - base_metrics.interference_level, 3),
+            }
 
-        # 5. Record to history, increment cycle & state version
-        self.history_service.record_decision(decision)
-        live_net.step()
-        state_mgr.increment_version()
+            # 5. Record to history, increment cycle & state version
+            self.history_service.record_decision(decision)
+            live_net.step()
+            state_mgr.increment_version()
 
-        return True, "Decision committed successfully. Live network state updated.", new_metrics
+            return True, "Decision committed successfully. Live network state updated.", new_metrics

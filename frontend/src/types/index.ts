@@ -147,6 +147,7 @@ export interface RefereeDecision {
     explanation: string;
     unit: string;
   } | null;
+  decision_intelligence?: DecisionIntelligenceAudit | null;
 }
 
 export interface MLStatus {
@@ -194,3 +195,69 @@ export interface BenchmarkComparison {
   cycles_evaluated: number;
   seed: number;
 }
+
+export interface SurrogatePrediction {
+  candidate_id: string;
+  target_cell: string;
+  predicted_coverage_delta: number;
+  predicted_coverage_pct: number;
+  predicted_interference_delta: number;
+  predicted_interference: number;
+  predicted_energy_delta: number;
+  predicted_total_energy: number;
+  predicted_is_safe: boolean;
+  safety_risk_score: number;
+  surrogate_objective_score: number;
+  prediction_latency_ms: number;
+  prediction_timestamp: number;
+  model_version: string;
+  data_provenance: string;
+}
+
+export interface CandidateTwinVerification {
+  candidate_id: string;
+  actual_coverage_delta: number;
+  actual_coverage_pct: number;
+  actual_interference_delta: number;
+  actual_interference: number;
+  actual_energy_delta: number;
+  actual_total_energy: number;
+  actual_is_safe: boolean;
+  violated_constraints: string[];
+  actual_objective_score: number;
+  verification_latency_ms: number;
+  verification_timestamp: number;
+}
+
+export interface PredictionVerificationPair {
+  candidate_id: string;
+  description: string;
+  target_cell: string;
+  action_type: string;
+  prediction: SurrogatePrediction;
+  verification: CandidateTwinVerification;
+  coverage_error_abs: number;
+  interference_error_abs: number;
+  safety_classification_match: boolean;
+  is_false_negative_risk: boolean;
+  arbitration_phase: string;
+}
+
+export interface DecisionIntelligenceAudit {
+  cycle: number;
+  decision_id: string;
+  timestamp: number;
+  total_candidates_screened: number;
+  ml_inference_total_ms: number;
+  twin_verification_total_ms: number;
+  candidate_comparisons: PredictionVerificationPair[];
+  top_predicted_candidate_id: string;
+  top_verified_candidate_id: string;
+  ranking_concordance: boolean;
+  mean_coverage_error: number;
+  mean_interference_error: number;
+  unsafe_candidates_flagged: number;
+  false_negatives_count: number;
+  status: string;
+}
+

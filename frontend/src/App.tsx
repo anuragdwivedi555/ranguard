@@ -28,7 +28,8 @@ import { BaselineComparison } from './components/BaselineComparison';
 import { DecisionHistory } from './components/DecisionHistory';
 import { CinematicExperience } from './components/cinematic/CinematicExperience';
 import { ModelInspector } from './components/inspector/ModelInspector';
-import { Box, Grid } from 'lucide-react';
+import { AIRiskLens } from './components/AIRiskLens';
+import { Box, Grid, ShieldAlert } from 'lucide-react';
 import { ControlRoom } from './control/ControlRoom';
 import { Landing } from './control/Landing';
 
@@ -42,6 +43,9 @@ export default function App() {
   // Math Inspector modal state
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [inspectorModelId, setInspectorModelId] = useState<string>('dbm-to-watt');
+
+  // AI Risk Lens modal state
+  const [showRiskLensModal, setShowRiskLensModal] = useState<boolean>(false);
 
   // Live simulation state (initialized with verified deterministic seed 42 data)
   const [networkState, setNetworkState] = useState<NetworkState>(DEFAULT_NETWORK_STATE);
@@ -300,10 +304,39 @@ export default function App() {
         initialModelId={inspectorModelId}
       />
 
+      {/* Modal for AI Risk Lens (On-Demand Decision Intelligence) */}
+      {showRiskLensModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-6xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+              <div className="flex items-center gap-2 text-lg font-bold text-slate-100">
+                <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+                  <ShieldAlert className="w-5 h-5" />
+                </span>
+                <span>AI Risk Lens — Decision Intelligence Audit</span>
+              </div>
+              <button
+                onClick={() => setShowRiskLensModal(false)}
+                className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/10 text-slate-300 text-sm font-medium transition"
+              >
+                Close ✕
+              </button>
+            </div>
+            <AIRiskLens currentDecision={currentDecision} />
+          </div>
+        </div>
+      )}
+
       {viewMode === 'landing' ? (
         <Landing onEnter={() => setViewMode('control')} />
       ) : viewMode === 'control' ? (
-        <ControlRoom onHome={() => setViewMode('landing')} onOpenStory={() => setViewMode('cinematic')} onOpenMath={() => handleOpenInspector()} />
+        <ControlRoom
+          onHome={() => setViewMode('landing')}
+          onOpenStory={() => setViewMode('cinematic')}
+          onOpenMath={() => handleOpenInspector()}
+          onOpenRiskLens={() => setShowRiskLensModal(true)}
+          onOpenLab={() => setViewMode('lab')}
+        />
       ) : viewMode === 'cinematic' ? (
         <CinematicExperience
           cells={networkState.cells}
@@ -334,6 +367,7 @@ export default function App() {
             isLoading={isLoading}
             onSwitchToCinematic={() => setViewMode('cinematic')}
             onOpenModelInspector={() => handleOpenInspector()}
+            onSwitchToControl={() => setViewMode('control')}
           />
 
           {/* Connection Status Banner if Backend Standby */}
@@ -431,7 +465,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* Row 4: Shadow Simulation Candidates */}
+            {/* Row 4: AI RISK LENS (AI Predicts -> Digital Twin Verifies -> Referee Decides) */}
+            <AIRiskLens currentDecision={currentDecision} />
+
+            {/* Row 5: Shadow Simulation Candidates */}
             <ShadowSimulation
               candidates={candidates}
               selectedCandidateId={currentDecision?.selected_candidate?.candidate_id}

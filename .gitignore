@@ -33,7 +33,8 @@ ENV/
 htmlcov/
 .tox/
 .nox/
-results/
+results/*
+!results/*.csv
 
 # Frontend Node
 node_modules/

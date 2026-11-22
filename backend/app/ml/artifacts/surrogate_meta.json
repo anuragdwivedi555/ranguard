@@ -1,0 +1,39 @@
+{
+  "params": {
+    "n_estimators": 45,
+    "max_depth": 3,
+    "learning_rate": 0.06,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "reg_lambda": 2.0,
+    "random_state": 42,
+    "objective": "reg:squarederror",
+    "eval_metric": "rmse",
+    "n_jobs": 1
+  },
+  "feature_names": [
+    "base_coverage_pct",
+    "base_interference",
+    "base_total_energy",
+    "base_avg_sinr",
+    "base_min_sinr",
+    "base_active_cells",
+    "base_cell_utilization",
+    "target_cell_idx",
+    "target_cell_curr_pwr",
+    "target_cell_proposed_pwr",
+    "target_cell_power_delta",
+    "target_cell_is_shutdown",
+    "target_cell_curr_load",
+    "target_cell_curr_interference",
+    "target_cell_connected_users",
+    "target_cell_neighbor_count",
+    "target_cell_neighbor_mean_pwr",
+    "action_num_cells_modified",
+    "action_total_delta_db",
+    "traffic_demand_multiplier"
+  ],
+  "is_fitted": true,
+  "version": "xgb-action-surrogate-v1.0",
+  "saved_at": 1795268146.5848966
+}
