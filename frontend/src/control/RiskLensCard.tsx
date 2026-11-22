@@ -8,7 +8,7 @@ import { fmt } from './model';
  * Compact AI Risk Lens card (right column). Shows whether AI screening is on, the latest
  * prediction-vs-digital-twin audit in a few numbers, and opens the full audit view.
  */
-export const RiskLensCard: React.FC<{ onOpen: () => void; refreshKey?: unknown }> = ({ onOpen, refreshKey }) => {
+export const RiskLensCard: React.FC<{ onOpen: () => void; refreshKey?: unknown; since?: number | null }> = ({ onOpen, refreshKey, since = null }) => {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [audit, setAudit] = useState<DecisionIntelligenceAudit | null>(null);
   const [offline, setOffline] = useState(false);
@@ -47,6 +47,8 @@ export const RiskLensCard: React.FC<{ onOpen: () => void; refreshKey?: unknown }
     }
   };
 
+  // an audit is "current" only if it was produced after the current scenario run started
+  const stale = !!audit && since !== null && audit.timestamp * 1000 < since - 1500;
   const stats = audit
     ? [
         { k: 'Options screened', v: `${audit.total_candidates_screened}`, tone: 'neutral' as const },
@@ -94,8 +96,14 @@ export const RiskLensCard: React.FC<{ onOpen: () => void; refreshKey?: unknown }
             </span>
           </button>
 
+          {audit && stale && (
+            <div className="mt-3 rounded-lg border border-amber-400/35 bg-amber-400/[0.08] px-3 py-2 text-[13px] text-amber-100 leading-snug">
+              These numbers are from an earlier run (cycle {audit.cycle}), not this scenario.{' '}
+              {enabled ? 'Run the scenario again to audit it.' : 'Turn the lens on above, then run the scenario again.'}
+            </div>
+          )}
           {audit ? (
-            <div className="mt-3">
+            <div className={`mt-3 transition-opacity ${stale ? 'opacity-50' : ''}`}>
               <div className="grid grid-cols-2 gap-2">
                 {stats.map((s) => (
                   <div key={s.k} className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2">
