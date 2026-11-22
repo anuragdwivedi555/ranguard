@@ -62,8 +62,8 @@ class ShadowSimulator:
 
             candidate_action = CandidateAction(
                 candidate_id=c_def["candidate_id"],
-                description=c_def["description"],
-                target_cell=c_def["target_cell"],
+                description=c_def.get("description", c_def["candidate_id"]),
+                target_cell=c_def.get("target_cell", "ALL"),
                 proposed_power=c_def.get("proposed_power", 0.0),
                 proposed_status=c_def.get("proposed_status", "ACTIVE"),
                 joint_actions=joint_actions,

@@ -112,4 +112,30 @@ export const api = {
     const res = await client.get('/ml/advisories');
     return res.data;
   },
+
+  // ML Decision Intelligence Surrogate & AI Risk Lens
+  getDecisionIntelligenceStatus: async (): Promise<any> => {
+    const res = await client.get('/ml/decision-intelligence/status');
+    return res.data;
+  },
+
+  toggleDecisionIntelligence: async (enabled: boolean): Promise<any> => {
+    const res = await client.post('/ml/decision-intelligence/toggle', { enabled });
+    return res.data;
+  },
+
+  getLatestIntelligenceAudit: async (): Promise<any> => {
+    const res = await client.get('/ml/decision-intelligence/audit/latest');
+    return res.data;
+  },
+
+  getIntelligenceEvaluation: async (): Promise<any> => {
+    const res = await client.get('/ml/decision-intelligence/evaluation');
+    return res.data;
+  },
+
+  predictCandidateOutcome: async (target_cell: string, proposed_power: number, proposed_status: string = 'ACTIVE'): Promise<any> => {
+    const res = await client.post('/ml/decision-intelligence/predict', { target_cell, proposed_power, proposed_status });
+    return res.data;
+  },
 };

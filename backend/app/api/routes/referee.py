@@ -18,6 +18,7 @@ history_service = HistoryService.get_instance()
 
 class EvaluateRequest(BaseModel):
     commands: List[ControllerCommand]
+    enable_ai_risk_lens: Optional[bool] = None
 
 
 class CommitRequest(BaseModel):
@@ -38,7 +39,14 @@ class CommitResponse(BaseModel):
 @router.post("/evaluate", response_model=RefereeDecision, summary="Evaluate candidate proposals in shadow simulation")
 def evaluate_proposals(req: EvaluateRequest):
     mgr = StateManager.get_instance()
-    decision = arbitrator.arbitrate(mgr.network, req.commands)
+    valid_cells = set(mgr.network.cells.keys())
+    for cmd in req.commands:
+        if cmd.target_cell not in valid_cells:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid target cell '{cmd.target_cell}'. Valid cell identifiers: {sorted(valid_cells)}",
+            )
+    decision = arbitrator.arbitrate(mgr.network, req.commands, enable_ai_risk_lens=req.enable_ai_risk_lens)
     return decision
 
 
@@ -66,6 +74,13 @@ def get_arbitration_history(limit: int = 50):
 @router.post("/shadow", summary="Run shadow simulation and return every candidate fork with its full calculation (no commit)")
 def shadow_review(req: EvaluateRequest):
     mgr = StateManager.get_instance()
+    valid_cells = set(mgr.network.cells.keys())
+    for cmd in req.commands:
+        if cmd.target_cell not in valid_cells:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid target cell '{cmd.target_cell}'. Valid cell identifiers: {sorted(valid_cells)}",
+            )
     return arbitrator.review(mgr.network, req.commands)
 
 

@@ -14,6 +14,7 @@ interface HeaderProps {
   isLoading: boolean;
   onSwitchToCinematic?: () => void;
   onOpenModelInspector?: () => void;
+  onSwitchToControl?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading,
   onSwitchToCinematic,
   onOpenModelInspector,
+  onSwitchToControl,
 }) => {
   return (
     <header className="bg-slate-900/95 border-b border-slate-800 px-4 sm:px-6 py-3 backdrop-blur-md sticky top-0 z-50">
@@ -103,6 +105,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Calculator className="w-3.5 h-3.5 text-cyan-400" />
               <span>Math</span>
+            </button>
+          )}
+
+          {onSwitchToControl && (
+            <button
+              onClick={onSwitchToControl}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-300 hover:text-white bg-amber-950/60 hover:bg-amber-900/60 active:scale-95 transition rounded-lg border border-amber-500/40"
+              title="Return to Control Room"
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Control Room</span>
             </button>
           )}
 

@@ -12,6 +12,7 @@ from .shadow_simulator import ShadowSimulator
 from .optimizer import ObjectiveOptimizer
 from .stability_manager import StabilityManager
 from ..ml.advisor import TrafficAdvisoryEngine
+from ..ml.surrogate.engine import DecisionIntelligenceEngine
 
 
 class ArbitrationEngine:
@@ -26,9 +27,20 @@ class ArbitrationEngine:
         self.shadow_simulator = ShadowSimulator(self.guardrails)
         self.stability_manager = StabilityManager()
         self.advisory_engine = advisory_engine or TrafficAdvisoryEngine.get_instance()
+        self.intelligence_engine = DecisionIntelligenceEngine.get_instance()
 
-    def _run_shadow(self, live_network: NetworkEngine, commands: List[ControllerCommand]) -> Dict[str, Any]:
+    def _run_shadow(
+        self,
+        live_network: NetworkEngine,
+        commands: List[ControllerCommand],
+        enable_ai_risk_lens: Optional[bool] = None,
+    ) -> Dict[str, Any]:
         """Conflict detection, ML advisory, candidate generation, shadow simulation and scoring."""
+        valid_cells = set(live_network.cells.keys())
+        for cmd in commands:
+            if cmd.target_cell not in valid_cells:
+                raise ValueError(f"Invalid target cell '{cmd.target_cell}'. Valid cell identifiers: {sorted(valid_cells)}")
+
         baseline_metrics = live_network.metrics
         current_cycle = live_network.cycle
         conflicts = self.conflict_detector.detect_conflicts(commands, live_network.cells)
@@ -57,8 +69,19 @@ class ArbitrationEngine:
         # Step 3: Candidate Generation
         candidate_defs = self.candidate_generator.generate_candidates(commands, live_network.cells)
 
-        # Step 4 & 5: Shadow Simulation & Safety Validation
-        evaluated_candidates = self.shadow_simulator.evaluate_candidates(live_network, candidate_defs)
+        # Step 4 & 5: AI PREDICTS -> DIGITAL TWIN VERIFIES -> AUDIT
+        # On-Demand Execution: only run surrogate inference pipeline if explicitly requested/enabled
+        run_lens = self.intelligence_engine.enabled if enable_ai_risk_lens is None else enable_ai_risk_lens
+        if run_lens:
+            evaluated_candidates, intelligence_audit = self.intelligence_engine.evaluate_with_intelligence_pipeline(
+                live_network=live_network,
+                candidate_defs=candidate_defs,
+                shadow_simulator=self.shadow_simulator,
+                force_audit=True,
+            )
+        else:
+            evaluated_candidates = self.shadow_simulator.evaluate_candidates(live_network, candidate_defs)
+            intelligence_audit = None
 
         # Step 6: Multi-Objective Scoring
         scored_candidates = ObjectiveOptimizer.score_candidates(
@@ -87,12 +110,14 @@ class ArbitrationEngine:
             "scored_candidates": scored_candidates,
             "advisory_applied": advisory_applied,
             "baseline_metrics": baseline_metrics,
+            "intelligence_audit": intelligence_audit,
         }
 
     def arbitrate(
         self,
         live_network: NetworkEngine,
         commands: List[ControllerCommand],
+        enable_ai_risk_lens: Optional[bool] = None,
     ) -> RefereeDecision:
         start_time = time.perf_counter()
 
@@ -127,32 +152,49 @@ class ArbitrationEngine:
             )
 
         # Steps 2-6: conflicts, advisory, candidate generation, shadow simulation, scoring
-        shadow = self._run_shadow(live_network, commands)
+        shadow = self._run_shadow(live_network, commands, enable_ai_risk_lens=enable_ai_risk_lens)
         conflicts = shadow["conflicts"]
         advisory_reports = shadow["advisory_reports"]
         primary_advisory = shadow["primary_advisory"]
         scored_candidates = shadow["scored_candidates"]
         advisory_applied = shadow["advisory_applied"]
+        intelligence_audit = shadow.get("intelligence_audit")
 
         # Separate safe vs unsafe candidates, sorted by objective_score descending
         safe_candidates = sorted([c for c in scored_candidates if c.is_safe], key=lambda x: x.objective_score, reverse=True)
         unsafe_candidates = [c for c in scored_candidates if not c.is_safe]
 
         # Step 7: Check Stability (Cooldown / Hysteresis) on primary proposed cells
-        # Check if the primary incoming command should be delayed
+        # Only evaluate cooldown for cells actually targeted by the candidate to avoid blocking unrelated cells
         should_delay = False
         delay_reason = ""
         is_override = False
 
-        for cmd in commands:
-            cell = live_network.cells.get(cmd.target_cell)
+        cells_to_check = set()
+        if safe_candidates and safe_candidates[0].joint_actions:
+            cells_to_check = set(safe_candidates[0].joint_actions.keys())
+        else:
+            cells_to_check = {cmd.target_cell for cmd in commands}
+
+        for cid in cells_to_check:
+            cell = live_network.cells.get(cid)
             if cell:
-                d_val = cmd.proposed_value - cell.tx_power_dbm if cmd.action_type != "SHUTDOWN" else -cell.tx_power_dbm
+                matching_act = safe_candidates[0].joint_actions.get(cid) if safe_candidates else None
+                if matching_act:
+                    act_status = matching_act.get("status", "ACTIVE")
+                    pwr = matching_act.get("tx_power_dbm", cell.tx_power_dbm)
+                    d_val = -cell.tx_power_dbm if act_status == "SHUTDOWN" else (pwr - cell.tx_power_dbm)
+                    act_type = act_status
+                else:
+                    cmd_match = next((c for c in commands if c.target_cell == cid), None)
+                    d_val = (cmd_match.proposed_value - cell.tx_power_dbm if cmd_match.action_type != "SHUTDOWN" else -cell.tx_power_dbm) if cmd_match else 0.0
+                    act_type = cmd_match.action_type if cmd_match else "POWER_ADJUST"
+
                 d_flag, d_msg, o_flag = self.stability_manager.check_stability(
-                    cell_id=cmd.target_cell,
+                    cell_id=cid,
                     proposed_delta=d_val,
-                    proposed_action_type=cmd.action_type,
-                    controller_id=cmd.controller_id,
+                    proposed_action_type=act_type,
+                    controller_id="REFEREE",
                     current_cycle=current_cycle,
                     current_metrics=baseline_metrics,
                 )
@@ -283,6 +325,7 @@ class ArbitrationEngine:
             state_version=state_version,
             computation_time_ms=comp_time,
             predictive_advisory=chosen_advisory,
+            decision_intelligence=intelligence_audit.model_dump() if intelligence_audit else None,
         )
 
 
@@ -308,6 +351,7 @@ class ArbitrationEngine:
             d_flag, d_msg, o_flag = self.stability_manager.check_stability(
                 cell_id=cmd.target_cell, proposed_delta=d_val, proposed_action_type=cmd.action_type,
                 controller_id=cmd.controller_id, current_cycle=cycle, current_metrics=baseline,
+                dry_run=True,
             )
             if d_flag and not o_flag:
                 delayed, delay_msg = True, d_msg
