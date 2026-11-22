@@ -29,7 +29,7 @@ import { DecisionHistory } from './components/DecisionHistory';
 import { CinematicExperience } from './components/cinematic/CinematicExperience';
 import { ModelInspector } from './components/inspector/ModelInspector';
 import { AIRiskLens } from './components/AIRiskLens';
-import { Box, Grid, ShieldAlert } from 'lucide-react';
+import { Box, Grid, ShieldAlert, X } from 'lucide-react';
 import { ControlRoom } from './control/ControlRoom';
 import { Landing } from './control/Landing';
 
@@ -46,6 +46,13 @@ export default function App() {
 
   // AI Risk Lens modal state
   const [showRiskLensModal, setShowRiskLensModal] = useState<boolean>(false);
+  const [lastCommittedId, setLastCommittedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!showRiskLensModal) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setShowRiskLensModal(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showRiskLensModal]);
 
   // Live simulation state (initialized with verified deterministic seed 42 data)
   const [networkState, setNetworkState] = useState<NetworkState>(DEFAULT_NETWORK_STATE);
@@ -306,23 +313,37 @@ export default function App() {
 
       {/* Modal for AI Risk Lens (On-Demand Decision Intelligence) */}
       {showRiskLensModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-          <div className="relative w-full max-w-6xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
-              <div className="flex items-center gap-2 text-lg font-bold text-slate-100">
-                <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+        <div
+          style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#0a0814]/80 backdrop-blur-md cr-fade-in"
+          onMouseDown={(e) => e.target === e.currentTarget && setShowRiskLensModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="AI Risk Lens decision intelligence audit"
+        >
+          <div className="relative w-full max-w-6xl h-[92vh] flex flex-col bg-[#16132b] border border-orange-300/20 rounded-2xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden text-slate-100">
+            <div className="flex items-center justify-between gap-4 px-5 sm:px-6 py-4 border-b border-white/[0.08] bg-gradient-to-r from-orange-400/[0.08] via-transparent to-transparent">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-11 h-11 shrink-0 rounded-xl bg-sky-400/15 border border-sky-300/35 text-sky-300 grid place-items-center">
                   <ShieldAlert className="w-5 h-5" />
-                </span>
-                <span>AI Risk Lens — Decision Intelligence Audit</span>
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-[19px] font-bold tracking-tight text-white leading-tight">AI Risk Lens</h2>
+                  <p className="text-[13.5px] text-slate-300 truncate">Decision intelligence audit: how well the AI’s predictions hold up against the digital twin.</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowRiskLensModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/10 text-slate-300 text-sm font-medium transition"
+                className="cr-lift shrink-0 w-9 h-9 grid place-items-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 border border-white/10"
+                title="Close (Esc)"
+                aria-label="Close AI Risk Lens"
               >
-                Close ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <AIRiskLens currentDecision={currentDecision} />
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5">
+              <AIRiskLens currentDecision={null} selectedCandidateId={lastCommittedId} />
+            </div>
           </div>
         </div>
       )}
@@ -335,6 +356,7 @@ export default function App() {
           onOpenStory={() => setViewMode('cinematic')}
           onOpenMath={() => handleOpenInspector()}
           onOpenRiskLens={() => setShowRiskLensModal(true)}
+          onCommitted={setLastCommittedId}
         />
       ) : viewMode === 'cinematic' ? (
         <CinematicExperience

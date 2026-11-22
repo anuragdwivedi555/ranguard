@@ -53,9 +53,10 @@ interface Props {
   onOpenStory: () => void;
   onOpenMath: () => void;
   onOpenRiskLens?: () => void;
+  onCommitted?: (candidateId: string) => void;
 }
 
-export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, onOpenRiskLens }) => {
+export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, onOpenRiskLens, onCommitted }) => {
   const [base, setBase] = useState<NetworkState>(DEFAULT_NETWORK_STATE);
   const [phase, setPhase] = useState<Phase>('idle');
   const [busy, setBusy] = useState(false);
@@ -82,6 +83,7 @@ export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, 
   const [chosenId, setChosenId] = useState<string | null>(null);
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<CommitOutcome | null>(null);
+  const [reviewSince, setReviewSince] = useState<number | null>(null);
 
   // ping-pong flow
   const [ping, setPing] = useState<ScenarioRun | null>(null);
@@ -133,7 +135,9 @@ export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, 
     setBusy(true);
     setError(null);
     try {
+      const t0 = Date.now();
       const r = await runShadow(prepared);
+      setReviewSince(t0);
       setReview(r);
       setRevealed(0);
       setPhase('simulating');
@@ -171,6 +175,7 @@ export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, 
     try {
       const o = await commitChoice(prepared, chosenId);
       setOutcome(o);
+      onCommitted?.(chosenId);
       setBase(o.after);
       setHistory((h) => [...h, o.metrics]);
       setPhase('done');
@@ -576,7 +581,7 @@ export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, 
                 )}
               </>
             )}
-            {onOpenRiskLens && <RiskLensCard onOpen={onOpenRiskLens} refreshKey={review ?? outcome} />}
+            {onOpenRiskLens && <RiskLensCard onOpen={onOpenRiskLens} refreshKey={review ?? outcome} since={phase === 'idle' || phase === 'proposals' ? null : reviewSince} />}
           </div>
         </div>
 

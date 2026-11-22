@@ -141,7 +141,8 @@ def get_latest_intelligence_audit(generate_if_empty: bool = True):
 
 @router.get("/decision-intelligence/evaluation", summary="Get held-out evaluation metrics across models")
 def get_intelligence_evaluation():
-    csv_path = Path(__file__).resolve().parent.parent.parent.parent / "results" / "ml_decision_intelligence_metrics.csv"
+    # repo root = routes -> api -> app -> backend -> <root>
+    csv_path = Path(__file__).resolve().parents[4] / "results" / "ml_decision_intelligence_metrics.csv"
     if csv_path.exists():
         df = pd.read_csv(csv_path)
         return {"status": "SUCCESS", "metrics": df.to_dict(orient="records")}

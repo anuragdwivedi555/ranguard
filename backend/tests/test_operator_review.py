@@ -60,3 +60,10 @@ def test_traffic_spike_prepare_and_review():
     assert len(commands) == 3
     r = client.post("/api/referee/shadow", json={"commands": commands}).json()
     assert r["conflicts"] and r["recommended_id"]
+
+
+def test_intelligence_evaluation_metrics_are_served():
+    """The held-out evaluation table must load from results/ (regression: wrong parent depth returned PENDING)."""
+    r = client.get("/api/ml/decision-intelligence/evaluation").json()
+    assert r["status"] == "SUCCESS"
+    assert any("XGBoost" in m["model_name"] for m in r["metrics"])
