@@ -335,7 +335,6 @@ export default function App() {
           onOpenStory={() => setViewMode('cinematic')}
           onOpenMath={() => handleOpenInspector()}
           onOpenRiskLens={() => setShowRiskLensModal(true)}
-          onOpenLab={() => setViewMode('lab')}
         />
       ) : viewMode === 'cinematic' ? (
         <CinematicExperience

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, Clapperboard, MousePointerClick, Moon, Sun, X, RotateCw, Crosshair, ShieldAlert, Layers } from 'lucide-react';
+import { BookOpen, CheckCircle2, Clapperboard, MousePointerClick, Moon, Sun, X, RotateCw, Crosshair, ShieldAlert } from 'lucide-react';
 import { BenchmarkComparison, Cell, NetworkMetrics, NetworkState } from '../types';
 import { DEFAULT_NETWORK_STATE } from '../data/defaultData';
 import { api } from '../services/api';
@@ -52,10 +52,9 @@ interface Props {
   onOpenStory: () => void;
   onOpenMath: () => void;
   onOpenRiskLens?: () => void;
-  onOpenLab?: () => void;
 }
 
-export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, onOpenRiskLens, onOpenLab }) => {
+export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, onOpenRiskLens }) => {
   const [base, setBase] = useState<NetworkState>(DEFAULT_NETWORK_STATE);
   const [phase, setPhase] = useState<Phase>('idle');
   const [busy, setBusy] = useState(false);
@@ -457,15 +456,6 @@ export const ControlRoom: React.FC<Props> = ({ onHome, onOpenStory, onOpenMath, 
             <button onClick={onOpenStory} className="flex items-center gap-1.5 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300">
               <Clapperboard className="w-3.5 h-3.5" /> <span className="hidden md:inline">3D story</span>
             </button>
-            {onOpenLab && (
-              <button
-                onClick={onOpenLab}
-                className="flex items-center gap-1.5 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300 transition"
-                title="Open classic Interactive Simulation Lab"
-              >
-                <Layers className="w-3.5 h-3.5" /> <span className="hidden md:inline">Simulation Lab</span>
-              </button>
-            )}
             <button onClick={reset} disabled={busy} className="text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/[0.06] text-slate-300 disabled:opacity-50" title="Reset network to seed 42 and clear session stats">
               Reset
             </button>

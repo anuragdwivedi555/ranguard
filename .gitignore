@@ -43,6 +43,7 @@ frontend/dist/
 # IDE & OS
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 .DS_Store

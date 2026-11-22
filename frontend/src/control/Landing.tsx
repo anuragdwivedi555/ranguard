@@ -1,14 +1,15 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
-import { HeroScene } from './HeroScene';
+import { HeroPhoto } from './HeroPhoto';
 
 /** Full-screen welcome page: hero photo, a short explanation of RANGUARD, one button to the dashboard. */
 export const Landing: React.FC<{ onEnter: () => void }> = ({ onEnter }) => (
   <div className="cr-root relative min-h-screen overflow-hidden text-slate-100 flex flex-col">
     {/* background photo + readability overlays */}
-    <HeroScene className="absolute inset-0 w-full h-full" />
-    <div className="absolute inset-0 bg-gradient-to-r from-[#0f0d1c]/95 via-[#0f0d1c]/70 to-transparent md:via-[#0f0d1c]/35" />
+    <HeroPhoto />
+    <div className="absolute inset-0 bg-[#0f0d1c]/75 md:hidden" />
+    <div className="absolute inset-0 hidden md:block bg-gradient-to-r from-[#0f0d1c]/90 md:via-[#0f0d1c]/58 md:via-45% md:to-transparent md:to-80%" />
     <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#0f0d1c]/90 to-transparent" />
 
     <header className="relative z-10 px-6 md:px-12 pt-6">
